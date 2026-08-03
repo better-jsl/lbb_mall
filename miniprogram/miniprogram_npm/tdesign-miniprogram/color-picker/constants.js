@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ALPHA_MAX = exports.HUE_MAX = exports.SLIDER_DEFAULT_WIDTH = exports.SATURATION_PANEL_DEFAULT_HEIGHT = exports.SATURATION_PANEL_DEFAULT_WIDTH = exports.DEFAULT_SYSTEM_SWATCH_COLORS = exports.DEFAULT_COLOR = void 0;
+exports.DEFAULT_COLOR = "#001F97";
+exports.DEFAULT_SYSTEM_SWATCH_COLORS = ["#F2F3FF", "#D9E1FF", "#B5C7FF", "#8EABFF", "#618DFF", "#366EF4", "#0052D9", "#003CAB", "#002A7C", "#001A57"];
+exports.SATURATION_PANEL_DEFAULT_WIDTH = 343;
+exports.SATURATION_PANEL_DEFAULT_HEIGHT = 144;
+exports.SLIDER_DEFAULT_WIDTH = 303;
+exports.HUE_MAX = 360;
+exports.ALPHA_MAX = 100;

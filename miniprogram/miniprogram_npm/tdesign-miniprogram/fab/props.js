@@ -1,0 +1,4 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const props = { buttonProps: { type: Object }, draggable: { type: null, value: !1 }, icon: { type: null }, style: { type: String, value: "right: 16px; bottom: 32px;" }, text: { type: String, value: "" }, usingCustomNavbar: { type: Boolean, value: !1 }, yBounds: { type: Array } };
+exports.default = props;

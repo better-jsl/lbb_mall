@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getDeviceInfo = exports.getAppBaseInfo = exports.getWindowInfo = exports.getObserver = void 0;
+const getObserver = (e, t) => new Promise(o => { e.createIntersectionObserver({ nativeMode: !0 }).relativeToViewport().observe(t, e => { o(e); }); });
+exports.getObserver = getObserver;
+const getWindowInfo = () => wx.getWindowInfo && wx.getWindowInfo() || wx.getSystemInfoSync();
+exports.getWindowInfo = getWindowInfo;
+const getAppBaseInfo = () => wx.getAppBaseInfo && wx.getAppBaseInfo() || wx.getSystemInfoSync();
+exports.getAppBaseInfo = getAppBaseInfo;
+const getDeviceInfo = () => wx.getDeviceInfo && wx.getDeviceInfo() || wx.getSystemInfoSync();
+exports.getDeviceInfo = getDeviceInfo;

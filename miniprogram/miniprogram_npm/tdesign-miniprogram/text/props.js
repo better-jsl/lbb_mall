@@ -1,0 +1,4 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const props = { code: { type: Boolean, value: !1 }, content: { type: String }, copyable: { type: null, value: !1 }, delete: { type: Boolean, value: !1 }, disabled: { type: Boolean, value: !1 }, ellipsis: { type: null, value: !1 }, italic: { type: Boolean, value: !1 }, keyboard: { type: Boolean, value: !1 }, mark: { type: null, value: !1 }, strong: { type: Boolean, value: !1 }, theme: { type: String }, underline: { type: Boolean, value: !1 } };
+exports.default = props;

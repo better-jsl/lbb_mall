@@ -1,0 +1,42 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.configStore = void 0;
+const reactive_state_1 = require("./reactive-state");
+class ConfigStore {
+    constructor() { this.currentLocale = new reactive_state_1.default({}), this.themeVars = new reactive_state_1.default({}), this._pageInitFlags = new Map, this._cleanupCallbacks = new Map; }
+    _deepEqual(e, t) { if (e === t)
+        return !0; if (typeof e != typeof t)
+        return !1; if (null == e || null == t)
+        return e === t; if ("object" != typeof e)
+        return !1; const a = Object.keys(e), r = Object.keys(t); if (a.length !== r.length)
+        return !1; try {
+        const a = JSON.stringify(e);
+        if (a === JSON.stringify(t))
+            return !0;
+    }
+    catch (e) { } return a.every(a => this._deepEqual(e[a], t[a])); }
+    switchLocale(e, t) { if (!t)
+        return; const a = this._getOrInitPageFlag(t); if (a.locale) {
+        (!e || 0 === Object.keys(e).length) === (0 === Object.keys(this.currentLocale.value).length) && this._deepEqual(e, this.currentLocale.value) || (this.currentLocale.value = e);
+    }
+    else
+        a.locale = !0, this.currentLocale.value = e; }
+    updateThemeVars(e) { this.themeVars.value = Object.assign(Object.assign({}, this.themeVars.value), e); }
+    _getOrInitPageFlag(e) { return this._pageInitFlags.has(e) || this._pageInitFlags.set(e, { theme: !1, locale: !1 }), this._pageInitFlags.get(e); }
+    registerCleanup(e, t) { this._cleanupCallbacks.set(e, t); }
+    resetPageState(e) { if (e) {
+        this._pageInitFlags.delete(e);
+        const t = this._cleanupCallbacks.get(e);
+        if (t) {
+            try {
+                t();
+            }
+            catch (t) {
+                console.error(`[ConfigStore] Error during cleanup for ${e}:`, t);
+            }
+            this._cleanupCallbacks.delete(e);
+        }
+        Array.from(this._pageInitFlags.values()).some(e => e.locale) || (this.currentLocale.value = {});
+    } }
+}
+exports.configStore = new ConfigStore;

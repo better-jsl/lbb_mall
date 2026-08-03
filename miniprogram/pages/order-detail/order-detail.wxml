@@ -1,0 +1,54 @@
+<view class="order-detail-page" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
+  <view class="page-header">
+    <view class="back-button" bindtap="goBack">
+      <t-icon name="chevron-left" size="44rpx" color="#182743" />
+    </view>
+    <text class="page-title">订单详情</text>
+  </view>
+
+  <view class="status-card">
+    <view class="status-icon">
+      <t-icon name="{{statusIcon}}" size="46rpx" color="#ffffff" />
+    </view>
+    <view class="status-copy">
+      <text class="status-title">{{status}}</text>
+      <text class="status-note">{{statusNote}}</text>
+    </view>
+  </view>
+
+  <view class="detail-card">
+    <text class="card-title">套餐信息</text>
+    <view class="package-row">
+      <view>
+        <text class="package-title">{{title}}</text>
+        <text class="package-merchant">{{merchant}}</text>
+      </view>
+      <text class="package-price">¥{{price}}</text>
+    </view>
+    <view class="package-content-list">
+      <view wx:for="{{contents}}" wx:key="name" class="package-content-row">
+        <text class="content-name">{{item.name}}</text>
+        <view class="content-value">
+          <text class="content-count">{{item.count}}</text>
+          <view wx:if="{{item.isPoints && canUsePoints}}" class="use-points-button">立即使用</view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="detail-card">
+    <text class="card-title">订单信息</text>
+    <view class="info-row">
+      <text>订单编号</text>
+      <text>{{orderNo}}</text>
+    </view>
+    <view class="info-row">
+      <text>下单时间</text>
+      <text>2026-08-03 15:20</text>
+    </view>
+    <view class="info-row no-border">
+      <text>支付金额</text>
+      <text class="payment">¥{{price}}</text>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,4 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const props = { allowUncheck: { type: Boolean, value: !1 }, block: { type: Boolean, value: !0 }, checked: { type: Boolean, value: null }, defaultChecked: { type: Boolean, value: !1 }, content: { type: String }, contentDisabled: { type: Boolean, value: !1 }, disabled: { type: null, value: void 0 }, icon: { type: null, value: "circle" }, label: { type: String }, maxContentRow: { type: Number, value: 5 }, maxLabelRow: { type: Number, value: 3 }, name: { type: String, value: "" }, placement: { type: String }, readonly: { type: null, value: void 0 }, value: { type: null, value: !1 } };
+exports.default = props;

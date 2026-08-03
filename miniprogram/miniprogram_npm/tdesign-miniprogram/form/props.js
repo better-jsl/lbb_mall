@@ -1,0 +1,4 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const props = { colon: { type: Boolean, value: !1 }, contentAlign: { type: String, value: "left" }, data: { type: Object, value: {} }, errorMessage: { type: Object }, labelAlign: { type: String, value: "right" }, labelWidth: { type: null, value: "81px" }, requiredMark: { type: null, value: void 0 }, requiredMarkPosition: { type: String }, resetType: { type: String, value: "empty" }, rules: { type: Object }, scrollToFirstError: { type: String }, showErrorMessage: { type: Boolean, value: !0 }, submitWithWarningMessage: { type: Boolean, value: !1 } };
+exports.default = props;

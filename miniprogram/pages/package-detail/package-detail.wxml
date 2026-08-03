@@ -1,0 +1,91 @@
+<view class="detail-page" style="--menu-button-bottom: {{menuButtonBottom}}px;">
+  <scroll-view class="detail-scroll" scroll-y enhanced show-scrollbar="{{false}}" bindscroll="onScroll">
+    <view class="hero">
+      <swiper class="hero-swiper" bindchange="onBannerChange">
+        <swiper-item wx:for="{{bannerImages}}" wx:key="*this">
+          <image class="hero-image" src="{{item}}" mode="aspectFill" data-current="{{item}}" bindtap="previewBanner" />
+        </swiper-item>
+      </swiper>
+      <view class="hero-indicators">
+        <view wx:for="{{bannerImages}}" wx:key="*this" class="hero-indicator {{activeBanner === index ? 'active' : ''}}"></view>
+      </view>
+      <view class="hero-fade"></view>
+      <view class="detail-nav" wx:if="{{false}}">
+        <view class="back-button" bindtap="goBack">
+          <t-icon name="chevron-left" size="46rpx" color="#ffffff" />
+        </view>
+        <text class="detail-nav-title">套餐详情</text>
+      </view>
+    </view>
+
+    <view class="detail-content">
+      <view class="summary-card">
+        <view class="summary-heading">
+          <text class="summary-title">{{title}}</text>
+          <text class="availability">限时可用</text>
+        </view>
+        <view class="summary-price-row">
+          <view>
+            <view class="summary-price">
+              <text class="summary-currency">¥</text>
+              <text>{{price}}</text>
+            </view>
+          </view>
+          <view class="summary-points">
+            <text>赠送积分</text>
+            <text class="summary-points-value">{{points}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="detail-card">
+        <text class="section-title">套餐内容</text>
+        <view wx:for="{{contents}}" wx:key="name" class="content-row">
+          <text class="row-index">0{{index + 1}}</text>
+          <text class="row-name">{{item.name}}</text>
+          <text class="row-count">{{item.count}}</text>
+        </view>
+      </view>
+
+      <view class="detail-card">
+        <text class="section-title">赠送内容</text>
+        <view class="points-gift">
+          <text class="row-index">01</text>
+          <view class="gift-copy">
+            <text class="row-name">乐伴伴商城积分</text>
+            <text class="gift-note">可用于商城购买酒水 / 茶叶等</text>
+          </view>
+          <text class="gift-points">{{points}}</text>
+        </view>
+        <view class="content-row no-border">
+          <text class="row-index">02</text>
+          <text class="row-name">到店专属服务</text>
+          <text class="row-count">1 次</text>
+        </view>
+      </view>
+
+      <view class="detail-card notice-card">
+        <text class="section-title">使用须知</text>
+        <text wx:for="{{notices}}" wx:key="*this" class="notice-line">{{item}}</text>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="detail-nav-shell" style="height: calc({{menuButtonBottom}}px + 20rpx);">
+    <view class="detail-nav-background" style="opacity: {{navOpacity}};"></view>
+    <view class="floating-nav" style="top: {{menuButtonTop}}px; height: {{menuButtonHeight}}px;">
+      <view class="back-button" style="width: {{menuButtonHeight}}px; height: {{menuButtonHeight}}px;" bindtap="goBack">
+        <t-icon name="chevron-left" size="46rpx" color="#ffffff" />
+      </view>
+      <text class="floating-nav-title">套餐详情</text>
+    </view>
+  </view>
+
+  <view class="purchase-bar">
+    <view class="purchase-price">
+      <text>¥</text>
+      <text class="purchase-price-value">{{price}}</text>
+    </view>
+    <button class="purchase-button" bindtap="buyNow">立即购买</button>
+  </view>
+</view>

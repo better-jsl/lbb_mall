@@ -1,0 +1,3 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.default = { status: { type: String, value: "" }, locale: { type: Object, value: { expiredText: "二维码过期", refreshText: "点击刷新", scannedText: "已扫描" } }, statusRender: { type: Boolean, value: !1 } };

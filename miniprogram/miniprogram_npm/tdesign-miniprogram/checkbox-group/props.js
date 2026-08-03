@@ -1,0 +1,4 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const props = { borderless: { type: Boolean, value: !1 }, disabled: { type: null, value: void 0 }, keys: { type: Object }, max: { type: Number, value: void 0 }, name: { type: String, value: "" }, options: { type: Array, value: [] }, readonly: { type: null, value: void 0 }, value: { type: Array, value: null }, defaultValue: { type: Array, value: [] } };
+exports.default = props;

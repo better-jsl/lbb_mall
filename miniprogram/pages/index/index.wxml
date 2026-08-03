@@ -1,0 +1,54 @@
+<view class="mall-page">
+  <view class="topbar" style="--menu-button-top: {{menuButtonTop}}px;">
+    <view class="brand">
+      <image class="brand-image" src="/assets/home-brand.png" mode="aspectFit" />
+    </view>
+  </view>
+
+  <view class="shop-body">
+    <scroll-view class="category-list" scroll-y enhanced show-scrollbar="{{false}}">
+      <view
+        wx:for="{{merchants}}"
+        wx:key="name"
+        class="category-card {{activeMerchant == index ? 'active' : ''}}"
+        data-index="{{index}}"
+        bindtap="selectMerchant"
+      >
+        <text class="category-name">{{item.name}}</text>
+        <text class="category-pinyin">{{item.pinyin}}</text>
+      </view>
+    </scroll-view>
+
+    <scroll-view class="package-list" scroll-y enhanced show-scrollbar="{{false}}">
+      <view
+        wx:for="{{packages}}"
+        wx:key="title"
+        class="package-card {{item.tone}} {{showPackageAnimation ? 'package-enter' : 'package-prepared'}}"
+        data-title="{{item.title}}"
+        data-price="{{item.price}}"
+        data-points="{{item.points}}"
+        bindtap="showPackageDetail"
+      >
+        <view class="package-text">
+          <text class="package-title">{{item.title}}</text>
+          <view class="gift-area">
+            <text class="gift-tag">{{item.tag}}</text>
+            <view wx:for="{{item.gifts}}" wx:key="*this" wx:for-item="gift" class="gift-row">
+              <view class="gift-dot"></view>
+              <text>{{gift}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="price-area">
+          <view class="price-line">
+            <text class="currency">¥</text>
+            <text class="price">{{item.price}}</text>
+          </view>
+          <text class="points-label">赠送积分</text>
+          <text class="points">{{item.points}}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</view>

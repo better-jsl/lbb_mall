@@ -1,0 +1,4 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const MinDistance = 10, getDirection = (t, s) => t > s && t > 10 ? "horizontal" : s > t && s > 10 ? "vertical" : "";
+exports.default = Behavior({ methods: { resetTouchStatus() { this.direction = "", this.deltaX = 0, this.deltaY = 0, this.offsetX = 0, this.offsetY = 0; }, touchStart(t) { this.resetTouchStatus(); const [s] = t.touches; this.startX = s.clientX, this.startY = s.clientY; }, touchMove(t) { const [s] = t.touches; this.deltaX = s.clientX - this.startX, this.deltaY = s.clientY - this.startY, this.offsetX = Math.abs(this.deltaX), this.offsetY = Math.abs(this.deltaY), this.direction = getDirection(this.offsetX, this.offsetY); } } });

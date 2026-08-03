@@ -1,0 +1,4 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const props = { current: { type: null, value: null }, defaultCurrent: { type: null }, indexList: { type: Array }, showFullIndex: { type: Boolean, value: !1 }, sticky: { type: Boolean, value: !0 }, stickyOffset: { type: Number, value: 0 } };
+exports.default = props;

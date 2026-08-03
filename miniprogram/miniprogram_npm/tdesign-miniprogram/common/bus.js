@@ -1,0 +1,9 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+class Bus {
+    constructor() { this.listeners = new Map, this.emitted = new Set; }
+    on(t, e) { if (this.emitted.has(t))
+        return void e(); const s = this.listeners.get(t) || []; s.push(e), this.listeners.set(t, s); }
+    emit(t) { const e = this.listeners.get(t); e && e.forEach(t => t()), this.emitted.add(t); }
+}
+exports.default = Bus;

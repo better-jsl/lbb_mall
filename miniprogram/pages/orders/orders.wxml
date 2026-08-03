@@ -1,0 +1,33 @@
+<view class="orders-page" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
+  <view class="orders-header">
+    <text class="orders-title">我的订单</text>
+  </view>
+
+  <t-tabs class="orders-tabs" value="{{activeStatus}}" theme="line" bind:change="selectStatus">
+    <t-tab-panel label="待核销" value="pending"></t-tab-panel>
+    <t-tab-panel label="已核销" value="verified"></t-tab-panel>
+    <t-tab-panel label="已失效" value="expired"></t-tab-panel>
+  </t-tabs>
+
+  <view class="order-list">
+    <view
+      wx:for="{{orders}}"
+      wx:key="id"
+      class="order-card {{showOrderAnimation ? 'order-enter' : 'order-prepared'}}"
+      data-title="{{item.title}}"
+      data-merchant="{{item.merchant}}"
+      data-price="{{item.price}}"
+      data-status="{{item.status}}"
+      bindtap="showOrderDetail"
+    >
+      <view class="order-main">
+        <text class="order-title">{{item.title}}</text>
+        <text class="order-merchant">{{item.merchant}}</text>
+      </view>
+      <view class="order-meta">
+        <text class="order-price">¥{{item.price}}</text>
+        <text class="order-status">{{item.status}}</text>
+      </view>
+    </view>
+  </view>
+</view>

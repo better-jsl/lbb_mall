@@ -1,0 +1,40 @@
+<view class="mine-page" style="--menu-button-bottom: {{menuButtonBottom}}px;">
+  <view class="profile">
+    <view class="avatar">
+      <t-icon name="user" size="56rpx" color="#ffffff" />
+    </view>
+    <view class="profile-text">
+      <text class="nickname">乐伴伴会员</text>
+      <text class="profile-subtitle">精选酒吧套餐与专属服务</text>
+    </view>
+    <view class="verification-action">
+    <t-button
+      icon="scan"
+      theme="default"
+      size="extra-small"
+      shape="round"
+      custom-style="width:172rpx;min-width:0;height:56rpx;padding:0 20rpx;background:#5d789f;border-color:#5d789f;color:#ffffff;font-size:22rpx;font-weight:700;white-space:nowrap;"
+      bindtap="goVerification"
+    >
+      我要核销
+    </t-button>
+    </view>
+  </view>
+
+  <view class="stats">
+    <view wx:for="{{stats}}" wx:key="label" class="stat-item" data-index="{{index}}" bindtap="openStat">
+      <text class="stat-value">{{item.value}}</text>
+      <text class="stat-label">{{item.label}}</text>
+    </view>
+  </view>
+
+  <view class="entry-list">
+    <view wx:for="{{entries}}" wx:key="label" class="entry-item">
+      <view class="entry-icon">
+        <t-icon name="{{item.icon}}" size="38rpx" color="#182743" />
+      </view>
+      <text>{{item.label}}</text>
+      <t-icon name="chevron-right" size="34rpx" color="#9aa3b2" />
+    </view>
+  </view>
+</view>

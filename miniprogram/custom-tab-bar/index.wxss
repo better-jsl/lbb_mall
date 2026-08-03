@@ -1,0 +1,12 @@
+.mall-tabbar {
+  --td-brand-color: #182743;
+  --td-tab-bar-color: #7a8495;
+  --td-tab-bar-active-color: #ffffff;
+  --td-tab-bar-active-bg: #182743;
+  --td-tab-bar-height: 92rpx;
+  --td-tab-bar-round-shadow: 0 18rpx 46rpx rgba(24, 39, 67, 0.18);
+}
+
+.mall-tabbar::before {
+  display: none;
+}

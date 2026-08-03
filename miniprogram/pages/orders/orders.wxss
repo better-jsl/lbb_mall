@@ -1,0 +1,104 @@
+page {
+  min-height: 100vh;
+  background: #f4f6fb;
+}
+
+.orders-page {
+  min-height: 100vh;
+  padding: var(--menu-button-top) 32rpx calc(146rpx + env(safe-area-inset-bottom));
+}
+
+.orders-header {
+  display: flex;
+  align-items: center;
+  height: var(--menu-button-height);
+  color: #182743;
+}
+
+.orders-title {
+  font-size: 48rpx;
+  font-weight: 800;
+  line-height: var(--menu-button-height);
+}
+
+.orders-tabs {
+  margin-top: 28rpx;
+  --td-brand-color: #182743;
+  --td-tab-nav-bg-color: transparent;
+  --td-bg-color-container: transparent;
+}
+
+.order-list {
+  margin-top: 20rpx;
+}
+
+.order-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 150rpx;
+  margin-bottom: 20rpx;
+  padding: 24rpx 28rpx;
+  border-radius: 16rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 28rpx rgba(24, 39, 67, 0.07);
+}
+
+.order-main,
+.order-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.order-title {
+  color: #182743;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.order-merchant {
+  margin-top: 12rpx;
+  color: #7a8495;
+  font-size: 24rpx;
+}
+
+.order-meta {
+  align-items: flex-end;
+}
+
+.order-price {
+  color: #182743;
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.order-status {
+  margin-top: 12rpx;
+  color: #17815d;
+  font-size: 24rpx;
+}
+
+.order-enter {
+  animation: order-fade-in 320ms ease-out both;
+}
+
+.order-prepared {
+  opacity: 0;
+  transform: translateY(14rpx);
+}
+
+.order-enter:nth-child(2) {
+  animation-delay: 50ms;
+}
+
+@keyframes order-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(14rpx);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

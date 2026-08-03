@@ -1,0 +1,44 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/package-detail/package-detail",
+    "pages/orders/orders",
+    "pages/order-detail/order-detail",
+    "pages/mine/mine",
+    "pages/points-record/points-record",
+    "pages/coupons/coupons"
+  ],
+  "window": {
+    "navigationStyle": "custom",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "\u4e50\u4f34\u4f34\u5546\u57ce",
+    "navigationBarBackgroundColor": "#f4f6fb"
+  },
+  "usingComponents": {
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-icon": "tdesign-miniprogram/icon/icon"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#7a8495",
+    "selectedColor": "#182743",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "\u9996\u9875"
+      },
+      {
+        "pagePath": "pages/orders/orders",
+        "text": "\u8ba2\u5355"
+      },
+      {
+        "pagePath": "pages/mine/mine",
+        "text": "\u6211\u7684"
+      }
+    ]
+  },
+  "style": "v2",
+  "componentFramework": "glass-easel",
+  "lazyCodeLoading": "requiredComponents"
+}

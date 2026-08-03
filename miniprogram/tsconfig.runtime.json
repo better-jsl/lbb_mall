@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES5",
+    "module": "CommonJS",
+    "strict": true,
+    "noImplicitAny": true,
+    "skipLibCheck": true,
+    "typeRoots": ["../typings"],
+    "outDir": ".",
+    "rootDir": "."
+  },
+  "files": [
+    "../typings/index.d.ts",
+    "app.ts",
+    "custom-tab-bar/index.ts",
+    "pages/index/index.ts",
+    "pages/orders/orders.ts",
+    "pages/order-detail/order-detail.ts",
+    "pages/mine/mine.ts",
+    "pages/package-detail/package-detail.ts",
+    "pages/points-record/points-record.ts",
+    "pages/coupons/coupons.ts"
+  ]
+}

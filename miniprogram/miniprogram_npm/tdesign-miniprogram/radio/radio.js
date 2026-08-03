@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const tslib_1 = require("tslib");
+const config_1 = require("../common/config");
+const index_1 = require("../common/src/index");
+const props_1 = require("./props");
+const { prefix: prefix } = config_1.default, name = `${prefix}-radio`;
+let Radio = class extends index_1.SuperComponent {
+    constructor() { super(...arguments), this.externalClasses = [`${prefix}-class`, `${prefix}-class-label`, `${prefix}-class-icon`, `${prefix}-class-content`, `${prefix}-class-border`], this.behaviors = ["wx://form-field"], this.relations = { "../radio-group/radio-group": { type: "ancestor", linked(e) { e.data.borderless && this.setData({ borderless: !0 }); } } }, this.options = { multipleSlots: !0 }, this.lifetimes = { attached() { this.init(); } }, this.properties = Object.assign(Object.assign({}, props_1.default), { borderless: { type: Boolean, value: !1 }, tId: { type: String } }), this.controlledProps = [{ key: "checked", event: "change" }], this.data = { prefix: prefix, classPrefix: name, customIcon: !1, slotIcon: !1, optionLinked: !1, iconVal: [], _placement: "", _disabled: !1, _readonly: !1 }, this.observers = { disabled(e) { this.setData({ _disabled: e }); }, readonly(e) { this.setData({ _readonly: e }); } }, this.methods = { handleTap(e) { const { _disabled: t, _readonly: a, contentDisabled: o } = this.data, { target: s } = e.currentTarget.dataset; t || a || "text" === s && o || this.doChange(); }, doChange() { var e; const { value: t, checked: a, allowUncheck: o } = this.data, s = Boolean(o || (null === (e = this.$parent) || void 0 === e ? void 0 : e.data.allowUncheck)); this.$parent ? this.$parent.updateValue(a && s ? null : t) : this._trigger("change", { checked: !s || !a }); }, init() { var e, t, a, o; const { icon: s } = this.data, i = Array.isArray((null === (e = this.$parent) || void 0 === e ? void 0 : e.icon) || s); this.setData({ customIcon: i, slotIcon: "slot" === s, iconVal: i ? (null === (t = this.$parent) || void 0 === t ? void 0 : t.icon) || s : [], _placement: this.data.placement || (null === (o = null === (a = this.$parent) || void 0 === a ? void 0 : a.data) || void 0 === o ? void 0 : o.placement) || "left" }); }, setDisabled(e) { this.setData({ _disabled: this.data.disabled || e }); }, setReadonly(e) { this.setData({ _readonly: this.data.readonly || e }); } }; }
+};
+Radio = (0, tslib_1.__decorate)([(0, index_1.wxComponent)()], Radio);
+exports.default = Radio;

@@ -1,0 +1,24 @@
+<view class="points-page" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
+  <view class="page-header">
+    <view class="back-button" bindtap="goBack">
+      <t-icon name="chevron-left" size="44rpx" color="#182743" />
+    </view>
+    <text class="page-title">积分记录</text>
+  </view>
+
+  <view class="points-summary">
+    <text class="summary-label">当前积分</text>
+    <text class="summary-value">1264</text>
+    <text class="summary-note">积分可用于商城兑换与专属福利</text>
+  </view>
+
+  <view class="record-list">
+    <view wx:for="{{records}}" wx:key="id" class="record-item">
+      <view class="record-main">
+        <text class="record-title">{{item.title}}</text>
+        <text class="record-time">{{item.time}}</text>
+      </view>
+      <text class="record-points {{item.change > 0 ? 'income' : 'expense'}}">{{item.change > 0 ? '+' : ''}}{{item.change}}</text>
+    </view>
+  </view>
+</view>
