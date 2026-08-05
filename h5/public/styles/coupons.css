@@ -1,0 +1,128 @@
+﻿body {
+  min-height: 100vh;
+  background: #f4f6fb;
+}
+
+.coupons-page {
+  min-height: 100vh;
+  padding: var(--menu-button-top) calc(32 * 100vw / 750) calc(calc(48 * 100vw / 750) + env(safe-area-inset-bottom));
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  height: var(--menu-button-height);
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(64 * 100vw / 750);
+  height: calc(64 * 100vw / 750);
+  margin-left: calc(-10 * 100vw / 750);
+}
+
+.page-title {
+  margin-left: calc(14 * 100vw / 750);
+  color: #182743;
+  font-size: calc(44 * 100vw / 750);
+  font-weight: 800;
+}
+
+.coupon-tabs {
+  margin-top: calc(30 * 100vw / 750);
+  --td-brand-color: #182743;
+  --td-tab-nav-bg-color: transparent;
+  --td-bg-color-container: transparent;
+}
+
+.coupon-list {
+  margin-top: calc(24 * 100vw / 750);
+}
+
+.coupon-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: calc(154 * 100vw / 750);
+  margin-bottom: calc(20 * 100vw / 750);
+  padding: calc(22 * 100vw / 750) calc(24 * 100vw / 750);
+  overflow: hidden;
+  border-radius: calc(18 * 100vw / 750);
+  background: #ffffff;
+  box-shadow: 0 calc(10 * 100vw / 750) calc(28 * 100vw / 750) rgba(24, 39, 67, 0.07);
+}
+
+.coupon-card::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(172 * 100vw / 750);
+  border-left: calc(1 * 100vw / 750) dashed #dce2eb;
+  content: '';
+}
+
+.coupon-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  width: calc(148 * 100vw / 750);
+  color: #245a9e;
+  font-size: calc(52 * 100vw / 750);
+  font-weight: 900;
+}
+
+.coupon-currency {
+  margin-right: calc(4 * 100vw / 750);
+  font-size: calc(28 * 100vw / 750);
+}
+
+.coupon-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  margin-left: calc(28 * 100vw / 750);
+}
+
+.coupon-title {
+  overflow: hidden;
+  color: #182743;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(29 * 100vw / 750);
+  font-weight: 800;
+}
+
+.coupon-note,
+.coupon-date {
+  margin-top: calc(9 * 100vw / 750);
+  color: #7a8495;
+  font-size: calc(22 * 100vw / 750);
+}
+
+.coupon-state {
+  position: absolute;
+  top: calc(18 * 100vw / 750);
+  right: calc(22 * 100vw / 750);
+  color: #245a9e;
+  font-size: calc(22 * 100vw / 750);
+  font-weight: 700;
+}
+
+.coupon-card.used,
+.coupon-card.expired {
+  opacity: 0.62;
+}
+
+.coupon-card.used .coupon-value,
+.coupon-card.used .coupon-state {
+  color: #7a8495;
+}
+
+.coupon-card.expired .coupon-value,
+.coupon-card.expired .coupon-state {
+  color: #b18b62;
+}
+

@@ -1,0 +1,113 @@
+﻿body {
+  min-height: 100vh;
+  background: #f4f6fb;
+}
+
+.points-page {
+  min-height: 100vh;
+  padding: var(--menu-button-top) calc(32 * 100vw / 750) calc(calc(48 * 100vw / 750) + env(safe-area-inset-bottom));
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  height: var(--menu-button-height);
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(64 * 100vw / 750);
+  height: calc(64 * 100vw / 750);
+  margin-left: calc(-10 * 100vw / 750);
+}
+
+.page-title {
+  margin-left: calc(14 * 100vw / 750);
+  color: #182743;
+  font-size: calc(44 * 100vw / 750);
+  font-weight: 800;
+}
+
+.points-summary {
+  display: flex;
+  flex-direction: column;
+  margin-top: calc(34 * 100vw / 750);
+  padding: calc(34 * 100vw / 750) calc(32 * 100vw / 750);
+  border-radius: calc(28 * 100vw / 750);
+  background: #182743;
+  color: #ffffff;
+  box-shadow: 0 calc(18 * 100vw / 750) calc(42 * 100vw / 750) rgba(24, 39, 67, 0.16);
+}
+
+.summary-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: calc(26 * 100vw / 750);
+}
+
+.summary-value {
+  margin-top: calc(10 * 100vw / 750);
+  font-size: calc(76 * 100vw / 750);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.summary-note {
+  margin-top: calc(20 * 100vw / 750);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: calc(24 * 100vw / 750);
+}
+
+.record-list {
+  margin-top: calc(28 * 100vw / 750);
+  overflow: hidden;
+  border-radius: calc(22 * 100vw / 750);
+  background: #ffffff;
+  box-shadow: 0 calc(10 * 100vw / 750) calc(28 * 100vw / 750) rgba(24, 39, 67, 0.07);
+}
+
+.record-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: calc(116 * 100vw / 750);
+  padding: 0 calc(28 * 100vw / 750);
+}
+
+.record-item + .record-item {
+  border-top: calc(1 * 100vw / 750) solid #eef1f6;
+}
+
+.record-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.record-title {
+  color: #182743;
+  font-size: calc(29 * 100vw / 750);
+  font-weight: 700;
+}
+
+.record-time {
+  margin-top: calc(10 * 100vw / 750);
+  color: #8a94a5;
+  font-size: calc(23 * 100vw / 750);
+}
+
+.record-points {
+  margin-left: calc(24 * 100vw / 750);
+  font-size: calc(34 * 100vw / 750);
+  font-weight: 800;
+}
+
+.record-points.income {
+  color: #17815d;
+}
+
+.record-points.expense {
+  color: #d65a63;
+}
+
