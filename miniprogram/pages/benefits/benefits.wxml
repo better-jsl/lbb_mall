@@ -1,0 +1,70 @@
+<network-error wx:if="{{networkError}}" bind:retry="retryNetwork" />
+<view class="benefits-page" hidden="{{networkError}}" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
+  <view class="benefit-top-spacer">
+    <view class="benefit-title-row"><text class="benefit-page-title">福利</text></view>
+  </view>
+
+  <scroll-view class="benefits-content" scroll-y enhanced show-scrollbar="{{false}}" refresher-enabled refresher-default-style="none" refresher-triggered="{{benefitsRefreshing}}" bindrefresherpulling="onBenefitsPulling" bindrefresherrefresh="refreshBenefits" bindrefresherrestore="onBenefitsRefreshRestore" bindrefresherabort="onBenefitsRefreshRestore">
+    <view class="benefits-refresher {{benefitsRefreshing ? 'is-refreshing' : ''}}" style="opacity: {{benefitsRefreshing || benefitsPullScale > 0 ? 1 : 0}}; transform: translateY(-72rpx) scale({{(benefitsRefreshing ? 1 : benefitsPullScale) * 1.35}});">
+      <view class="benefits-refresh-dot"></view><view class="benefits-refresh-dot"></view><view class="benefits-refresh-dot"></view>
+      <text wx:if="{{benefitsRefreshing}}" class="benefits-refresh-label">正在刷新</text>
+    </view>
+  <view class="benefit-points-card">
+    <text class="benefit-points-label">我的积分</text>
+    <view class="benefit-points-value"><text class="benefit-points-number">{{userPoints}}</text></view>
+  </view>
+
+  <view class="benefit-leaderboard">
+    <view class="leaderboard-header">
+      <text class="leaderboard-title">积分排行榜</text>
+      <text class="leaderboard-subtitle">TOP 5</text>
+    </view>
+    <block wx:for="{{leaderboard}}" wx:key="key">
+      <view wx:if="{{item.isEllipsis}}" class="leaderboard-ellipsis"><text>•••</text></view>
+      <view wx:else class="leaderboard-item {{item.isCurrent ? 'is-current' : ''}}">
+        <view class="leaderboard-rank rank-{{item.rank}}"><text>{{item.rank}}</text></view>
+        <view class="leaderboard-avatar"><text>{{item.initial}}</text></view>
+        <text class="leaderboard-name">{{item.nickname}}</text>
+        <text class="leaderboard-points">{{item.points}}</text>
+      </view>
+    </block>
+  </view>
+
+  <view class="benefit-grid">
+    <view wx:for="{{benefitItems}}" wx:key="id" class="benefit-grid-item" data-id="{{item.action}}" bindtap="openBenefit">
+      <view class="benefit-emoji">{{item.emoji}}</view>
+      <text class="benefit-label">{{item.label}}</text>
+    </view>
+  </view>
+
+  <view class="benefit-notice">
+    <text class="benefit-notice-icon">🔊</text>
+    <swiper class="benefit-notice-swiper" vertical autoplay circular interval="2600" duration="450">
+      <swiper-item wx:for="{{noticeItems}}" wx:key="*this">
+        <view class="benefit-notice-item"><text class="benefit-notice-text">{{item}}</text></view>
+      </swiper-item>
+    </swiper>
+    <text class="benefit-notice-arrow">›</text>
+  </view>
+
+  <view class="benefit-promos">
+    <view wx:for="{{promoCards}}" wx:key="id" class="benefit-promo" data-id="{{item.action}}" bindtap="openBenefit">
+      <image class="benefit-promo-image" src="{{item.image}}" mode="aspectFill" />
+    </view>
+  </view>
+  </scroll-view>
+
+  <view wx:if="{{enterpriseDialogVisible && enterpriseDialog}}" class="enterprise-dialog-layer" catchtap="closeEnterpriseDialog">
+    <view class="enterprise-dialog" catchtap="preventDialogClose">
+      <view class="enterprise-dialog-header">
+        <text class="enterprise-dialog-title">{{enterpriseDialog.title}}</text>
+        <view class="enterprise-dialog-close" bindtap="closeEnterpriseDialog"><text>×</text></view>
+      </view>
+      <view class="enterprise-dialog-content">
+        <image class="enterprise-qr-image" src="{{enterpriseDialog.image}}" mode="aspectFit" />
+        <text class="enterprise-dialog-primary">{{enterpriseDialog.primary}}</text>
+        <text class="enterprise-dialog-secondary">{{enterpriseDialog.secondary}}</text>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,12 +1,31 @@
 .mall-tabbar {
   --td-brand-color: #182743;
-  --td-tab-bar-color: #7a8495;
-  --td-tab-bar-active-color: #ffffff;
-  --td-tab-bar-active-bg: #182743;
-  --td-tab-bar-height: 92rpx;
-  --td-tab-bar-round-shadow: 0 18rpx 46rpx rgba(24, 39, 67, 0.18);
+  --td-tab-bar-color: #b6bdc8;
+  --td-tab-bar-active-color: #182743;
+  --td-tab-bar-bg-color: #ffffff;
+  --td-tab-bar-height: 112rpx;
+  --td-font-body-extraSmall: 24rpx / 34rpx PingFang SC, Microsoft YaHei, Arial, sans-serif;
+  border-radius: 32rpx 32rpx 0 0;
+  box-shadow: 0 -8rpx 28rpx rgba(24, 39, 67, 0.08);
 }
 
-.mall-tabbar::before {
-  display: none;
+.mall-tabbar-item-selected {
+  position: relative;
+  z-index: 1;
+  animation: tabbar-item-select 240ms cubic-bezier(0.22, 0.8, 0.28, 1) both;
+  transform: scale(1.07);
+}
+
+@keyframes tabbar-item-select {
+  from {
+    transform: scale(1);
+  }
+
+  70% {
+    transform: scale(1.12);
+  }
+
+  to {
+    transform: scale(1.07);
+  }
 }

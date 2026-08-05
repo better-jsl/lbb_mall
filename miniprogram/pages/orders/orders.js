@@ -1,46 +1,63 @@
 "use strict";
-var allOrders = [
-    { id: 'order-1', title: '名仕洋酒套餐', merchant: '梦田', price: '1,580', status: '待核销', state: 'pending' },
-    { id: 'order-2', title: '喜力啤酒套餐', merchant: '柏林之声', price: '498', status: '待核销', state: 'pending' },
-    { id: 'order-3', title: '百威小酌套餐', merchant: '欢乐迪', price: '39.9', status: '已核销', state: 'verified' },
-    { id: 'order-4', title: '野格欢喜套餐', merchant: '欢唱', price: '298', status: '已失效', state: 'expired' },
-];
+Object.defineProperty(exports, "__esModule", { value: true });
+const client_1 = require("../../api/client");
+const local_image_1 = require("../../api/local-image");
+function normalizePage(response) {
+    return Array.isArray(response) ? { items: response, hasMore: false } : response;
+}
+function refreshDelay(startedAt) {
+    return new Promise((resolve) => setTimeout(resolve, Math.max(0, 520 - (Date.now() - startedAt))));
+}
 Page({
     data: {
         menuButtonTop: 0,
         menuButtonHeight: 0,
         activeStatus: 'pending',
         showOrderAnimation: true,
-        orders: allOrders.filter(function (item) { return item.state === 'pending'; }),
+        orders: [],
+        orderPage: 1,
+        ordersHasMore: false,
+        ordersLoading: false,
+        ordersRefreshing: false,
+        ordersPullScale: 0,
+        networkError: false,
     },
-    onLoad: function () {
-        var app = getApp();
-        this.setData({
-            menuButtonTop: app.globalData.menuButtonTop,
-            menuButtonHeight: app.globalData.menuButtonHeight,
-        });
-    },
-    onShow: function () {
-        var tabBar = this.getTabBar && this.getTabBar();
-        if (tabBar) {
-            tabBar.setData({ selected: 1 });
+    onLoad() { const app = getApp(); this.setData({ menuButtonTop: app.globalData.menuButtonTop, menuButtonHeight: app.globalData.menuButtonHeight }); this.loadOrders('pending'); },
+    onShow() { const tabBar = this.getTabBar && this.getTabBar(); if (tabBar)
+        tabBar.setData({ selected: 2 }); this.loadOrders(this.data.activeStatus); },
+    async loadOrders(status, page = 1, append = false) {
+        if (this.data.ordersLoading)
+            return;
+        this.setData({ ordersLoading: true });
+        try {
+            const response = normalizePage(await (0, client_1.request)(`/orders?status=${status}&page=${page}&pageSize=10`));
+            const orderItems = await this.loadOrderImages(response.items);
+            const orders = append ? [...this.data.orders, ...orderItems] : orderItems;
+            this.setData({ orders, orderPage: page, ordersHasMore: response.hasMore, showOrderAnimation: false, networkError: false }, () => wx.nextTick(() => this.setData({ showOrderAnimation: true })));
+        }
+        catch {
+            if (!append && page === 1)
+                this.setData({ networkError: true });
+            wx.showToast({ title: '加载订单失败', icon: 'none' });
+        }
+        finally {
+            this.setData({ ordersLoading: false });
         }
     },
-    selectStatus: function (event) {
-        var _this = this;
-        var activeStatus = event.detail.value;
-        this.setData({
-            activeStatus: activeStatus,
-            orders: allOrders.filter(function (item) { return item.state === activeStatus; }),
-            showOrderAnimation: false,
-        }, function () {
-            wx.nextTick(function () { return _this.setData({ showOrderAnimation: true }); });
-        });
+    retryNetwork() { this.setData({ networkError: false }); this.loadOrders(this.data.activeStatus); },
+    async loadOrderImages(orders) { return Promise.all(orders.map(async (item) => ({ ...item, image: await (0, local_image_1.localImagePath)(item.image) }))); },
+    selectStatus(event) { const activeStatus = event.detail.value; this.setData({ activeStatus }); this.loadOrders(activeStatus); },
+    async refreshOrders() {
+        const startedAt = Date.now();
+        this.setData({ ordersRefreshing: true, ordersPullScale: 1 });
+        await this.loadOrders(this.data.activeStatus);
+        await refreshDelay(startedAt);
+        this.setData({ ordersRefreshing: false, ordersPullScale: 0 });
     },
-    showOrderDetail: function (event) {
-        var _a = event.currentTarget.dataset, title = _a.title, merchant = _a.merchant, price = _a.price, status = _a.status;
-        wx.navigateTo({
-            url: "/pages/order-detail/order-detail?title=".concat(encodeURIComponent(String(title)), "&merchant=").concat(encodeURIComponent(String(merchant)), "&price=").concat(encodeURIComponent(String(price)), "&status=").concat(encodeURIComponent(String(status))),
-        });
-    },
+    onOrdersPulling(event) { this.setData({ ordersPullScale: Math.min(1, Math.max(0, event.detail.dy) / 90) }); },
+    onOrdersRefreshRestore() { if (!this.data.ordersRefreshing)
+        this.setData({ ordersPullScale: 0 }); },
+    loadMoreOrders() { if (!this.data.ordersHasMore || this.data.ordersLoading)
+        return; this.loadOrders(this.data.activeStatus, this.data.orderPage + 1, true); },
+    showOrderDetail(event) { wx.navigateTo({ url: `/pages/order-detail/order-detail?id=${encodeURIComponent(String(event.currentTarget.dataset.id))}` }); },
 });

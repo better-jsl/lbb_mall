@@ -4,11 +4,10 @@
   fixed="{{true}}"
   placeholder="{{true}}"
   safe-area-inset-bottom="{{true}}"
-  bordered="{{false}}"
+  bordered="{{true}}"
   split="{{false}}"
-  shape="round"
-  theme="tag"
-  style="bottom: calc(16rpx + env(safe-area-inset-bottom));"
+  shape="normal"
+  theme="normal"
   bind:change="onTabChange"
 >
   <t-tab-bar-item
@@ -16,6 +15,7 @@
     wx:key="pagePath"
     value="{{index}}"
     icon="{{item.icon}}"
+    t-class="{{selected === index ? 'mall-tabbar-item-selected' : ''}}"
   >
     {{item.text}}
   </t-tab-bar-item>

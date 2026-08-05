@@ -1,6 +1,7 @@
-<view class="orders-page" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
+<network-error wx:if="{{networkError}}" bind:retry="retryNetwork" />
+<view class="orders-page" hidden="{{networkError}}" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
   <view class="orders-header">
-    <text class="orders-title">我的订单</text>
+    <view class="orders-title-row"><text class="orders-title">订单</text></view>
   </view>
 
   <t-tabs class="orders-tabs" value="{{activeStatus}}" theme="line" bind:change="selectStatus">
@@ -9,25 +10,35 @@
     <t-tab-panel label="已失效" value="expired"></t-tab-panel>
   </t-tabs>
 
-  <view class="order-list">
+  <scroll-view class="order-list" scroll-y enhanced show-scrollbar="{{false}}" refresher-enabled refresher-default-style="none" refresher-triggered="{{ordersRefreshing}}" bindrefresherpulling="onOrdersPulling" bindrefresherrefresh="refreshOrders" bindrefresherrestore="onOrdersRefreshRestore" bindrefresherabort="onOrdersRefreshRestore" lower-threshold="80" bindscrolltolower="loadMoreOrders">
+    <view class="list-refresher {{ordersRefreshing ? 'is-refreshing' : ''}}" style="opacity: {{ordersRefreshing || ordersPullScale > 0 ? 1 : 0}}; transform: translateY(-72rpx) scale({{(ordersRefreshing ? 1 : ordersPullScale) * 1.35}});">
+      <view class="list-refresh-dot"></view><view class="list-refresh-dot"></view><view class="list-refresh-dot"></view>
+      <text wx:if="{{ordersRefreshing}}" class="list-refresh-label">正在刷新</text>
+    </view>
     <view
       wx:for="{{orders}}"
       wx:key="id"
-      class="order-card {{showOrderAnimation ? 'order-enter' : 'order-prepared'}}"
-      data-title="{{item.title}}"
-      data-merchant="{{item.merchant}}"
-      data-price="{{item.price}}"
-      data-status="{{item.status}}"
+      class="order-card {{item.state === 'expired' ? 'is-expired' : ''}} {{showOrderAnimation ? 'order-enter' : 'order-prepared'}}"
+      style="animation-delay: {{index * 75}}ms;"
+      data-id="{{item.id}}"
       bindtap="showOrderDetail"
     >
-      <view class="order-main">
-        <text class="order-title">{{item.title}}</text>
-        <text class="order-merchant">{{item.merchant}}</text>
+      <view class="order-content">
+        <view class="order-cover-wrap">
+          <image wx:if="{{item.image}}" class="order-cover" src="{{item.image}}" mode="aspectFill" />
+          <view wx:else class="order-cover-placeholder"><t-icon name="image-error" size="42rpx" color="#9aa3b2" /></view>
+          <view wx:if="{{item.state === 'expired' && item.image}}" class="order-cover-mask"></view>
+        </view>
+        <view class="order-main">
+          <text class="order-title">{{item.title}}</text>
+          <text class="order-merchant">{{item.merchant}}</text>
+        </view>
       </view>
       <view class="order-meta">
-        <text class="order-price">¥{{item.price}}</text>
-        <text class="order-status">{{item.status}}</text>
+        <text class="order-price">{{item.priceText}}</text>
       </view>
     </view>
-  </view>
+    <view wx:if="{{ordersLoading}}" class="order-load-status">加载中...</view>
+    <view wx:elif="{{orders.length && !ordersHasMore}}" class="order-load-status">没有更多订单了</view>
+  </scroll-view>
 </view>

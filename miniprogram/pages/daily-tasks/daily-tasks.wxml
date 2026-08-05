@@ -1,0 +1,20 @@
+<network-error wx:if="{{networkError}}" bind:retry="retryNetwork" />
+<view class="daily-page" hidden="{{networkError}}" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
+  <view class="daily-header">
+    <view class="daily-nav-row">
+      <view class="daily-back" bindtap="goBack"><t-icon name="chevron-left" size="48rpx" color="#182743" /></view>
+      <text class="daily-page-title">每日任务</text>
+    </view>
+  </view>
+
+  <view class="daily-task-list">
+    <view wx:for="{{tasks}}" wx:key="id" class="daily-task-card">
+      <view class="daily-task-icon"><text>{{item.emoji}}</text></view>
+      <view class="daily-task-copy">
+        <text class="daily-task-title">{{item.title}}</text>
+        <text class="daily-task-reward">+{{item.reward}}积分</text>
+      </view>
+      <button class="daily-task-action {{item.completed ? 'is-completed' : ''}}" data-id="{{item.id}}" bindtap="handleTask">{{item.actionText}}</button>
+    </view>
+  </view>
+</view>

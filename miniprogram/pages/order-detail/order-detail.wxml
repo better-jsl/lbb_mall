@@ -1,4 +1,5 @@
-<view class="order-detail-page" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
+<network-error wx:if="{{networkError}}" bind:retry="retryNetwork" />
+<view class="order-detail-page" hidden="{{networkError}}" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
   <view class="page-header">
     <view class="back-button" bindtap="goBack">
       <t-icon name="chevron-left" size="44rpx" color="#182743" />
@@ -17,20 +18,20 @@
   </view>
 
   <view class="detail-card">
-    <text class="card-title">套餐信息</text>
+    <text class="card-title">{{sectionTitle}}</text>
     <view class="package-row">
       <view>
         <text class="package-title">{{title}}</text>
         <text class="package-merchant">{{merchant}}</text>
       </view>
-      <text class="package-price">¥{{price}}</text>
+      <text class="package-price">{{priceText}}</text>
     </view>
     <view class="package-content-list">
       <view wx:for="{{contents}}" wx:key="name" class="package-content-row">
         <text class="content-name">{{item.name}}</text>
         <view class="content-value">
           <text class="content-count">{{item.count}}</text>
-          <view wx:if="{{item.isPoints && canUsePoints}}" class="use-points-button">立即使用</view>
+          <view wx:if="{{item.isPoints && canUsePoints}}" class="use-points-button" bindtap="openExchange">立即使用</view>
         </view>
       </view>
     </view>
@@ -44,11 +45,15 @@
     </view>
     <view class="info-row">
       <text>下单时间</text>
-      <text>2026-08-03 15:20</text>
+      <text>{{createdAt}}</text>
     </view>
     <view class="info-row no-border">
       <text>支付金额</text>
-      <text class="payment">¥{{price}}</text>
+      <text class="payment">{{priceText}}</text>
     </view>
+  </view>
+
+  <view wx:if="{{canVerify}}" class="verify-bar">
+    <button class="verify-order-button" bindtap="verifyOrder">我要核销</button>
   </view>
 </view>

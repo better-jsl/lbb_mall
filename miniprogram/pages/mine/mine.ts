@@ -1,44 +1,47 @@
+import { request } from '../../api/client'
+
+type Stat = { label: string; value: string }
+type SavedAddress = { region: string[] }
+type ProfileSummary = { profile: { nickname: string; avatar: string; phone: string }; stats: Stat[] }
+
 Page({
   data: {
+    menuButtonTop: 0,
+    menuButtonHeight: 0,
     menuButtonBottom: 0,
-    stats: [
-      { label: '积分', value: '1264' },
-      { label: '优惠券', value: '3' },
-      { label: '收藏', value: '8' },
-    ],
+    addressSummary: '',
+    nickname: '',
+    stats: [] as Stat[],
+    networkError: false,
     entries: [
-      { icon: 'location', label: '常用地址' },
+      { icon: 'location', label: '地址设置', route: 'address' },
+      { icon: 'file-paste', label: '我的订单', route: 'orders' },
     ],
   },
-
   onLoad() {
     const app = getApp<IAppOption>()
-
-    this.setData({
-      menuButtonBottom: app.globalData.menuButtonBottom,
-    })
+    this.setData({ menuButtonTop: app.globalData.menuButtonTop, menuButtonHeight: app.globalData.menuButtonHeight, menuButtonBottom: app.globalData.menuButtonBottom })
   },
-
-  onShow() {
-    const tabBar = this.getTabBar && this.getTabBar()
-
-    if (tabBar) {
-      tabBar.setData({ selected: 2 })
-    }
-  },
-
+  onShow() { const tabBar = this.getTabBar && this.getTabBar(); if (tabBar) tabBar.setData({ selected: 3 }); this.loadSummary(); this.loadAddressSummary() },
+  async loadSummary() { try { const summary = await request<ProfileSummary>('/me/summary'); this.setData({ stats: summary.stats, nickname: summary.profile.nickname, networkError: false }) } catch { this.setData({ networkError: true }); wx.showToast({ title: '加载个人信息失败', icon: 'none' }) } },
+  retryNetwork() { this.setData({ networkError: false }); this.loadSummary(); this.loadAddressSummary() },
   goVerification() {
-    wx.scanCode({
-      scanType: ['qrCode', 'barCode'],
-    })
+    wx.scanCode({ scanType: ['qrCode', 'barCode'], success: async ({ result }) => {
+      try { await request('/orders/verify', 'POST', { code: result }); wx.showToast({ title: '核销成功', icon: 'success' }); this.loadSummary() } catch { wx.showToast({ title: '核销失败', icon: 'none' }) }
+    } })
   },
-
-  openStat(event: WechatMiniprogram.TouchEvent) {
-    const index = Number(event.currentTarget.dataset.index)
-    const url = index === 0 ? '/pages/points-record/points-record' : index === 1 ? '/pages/coupons/coupons' : ''
-
-    if (url) {
-      wx.navigateTo({ url })
+  openStat(event: WechatMiniprogram.TouchEvent) { const index = Number(event.currentTarget.dataset.index); const url = index === 0 ? '/pages/points-record/points-record' : index === 1 ? '/pages/coupons/coupons' : ''; if (url) wx.navigateTo({ url }) },
+  async loadAddressSummary() {
+    try {
+      const saved = await request<SavedAddress | null>('/me/address')
+      this.setData({ addressSummary: saved ? saved.region.join(' ') : '' })
+    } catch {
+      this.setData({ addressSummary: '' })
     }
+  },
+  openEntry(event: WechatMiniprogram.TouchEvent) {
+    const route = String(event.currentTarget.dataset.route)
+    if (route === 'address') wx.navigateTo({ url: '/pages/common-address/common-address' })
+    if (route === 'orders') wx.switchTab({ url: '/pages/orders/orders' })
   },
 })

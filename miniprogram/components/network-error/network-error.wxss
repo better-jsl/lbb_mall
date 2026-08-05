@@ -1,0 +1,53 @@
+:host {
+  display: block;
+}
+
+.network-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 0 48rpx 120rpx;
+  box-sizing: border-box;
+  background: #f4f6fb;
+}
+
+.network-error-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 136rpx;
+  height: 136rpx;
+  border-radius: 50%;
+  background: #e9edf4;
+}
+
+.network-error-title {
+  margin-top: 28rpx;
+  color: #182743;
+  font-size: 34rpx;
+  font-weight: 700;
+  line-height: 48rpx;
+}
+
+.network-error-description {
+  margin-top: 8rpx;
+  color: #7a8495;
+  font-size: 26rpx;
+  line-height: 38rpx;
+}
+
+.network-error-retry {
+  min-width: 184rpx;
+  height: 72rpx;
+  margin-top: 36rpx;
+  padding: 0 28rpx;
+  border: 0;
+  border-radius: 36rpx;
+  background: #182743;
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 600;
+  line-height: 72rpx;
+}

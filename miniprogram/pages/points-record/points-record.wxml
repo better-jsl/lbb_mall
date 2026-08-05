@@ -1,4 +1,5 @@
-<view class="points-page" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
+<network-error wx:if="{{networkError}}" bind:retry="retryNetwork" />
+<view class="points-page" hidden="{{networkError}}" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
   <view class="page-header">
     <view class="back-button" bindtap="goBack">
       <t-icon name="chevron-left" size="44rpx" color="#182743" />

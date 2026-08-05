@@ -4,7 +4,11 @@
     "pages/package-detail/package-detail",
     "pages/orders/orders",
     "pages/order-detail/order-detail",
+    "pages/benefits/benefits",
+    "pages/daily-tasks/daily-tasks",
+    "pages/game-points/game-points",
     "pages/mine/mine",
+    "pages/common-address/common-address",
     "pages/points-record/points-record",
     "pages/coupons/coupons"
   ],
@@ -16,7 +20,8 @@
   },
   "usingComponents": {
     "t-button": "tdesign-miniprogram/button/button",
-    "t-icon": "tdesign-miniprogram/icon/icon"
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "network-error": "/components/network-error/network-error"
   },
   "tabBar": {
     "custom": true,
@@ -26,7 +31,11 @@
     "list": [
       {
         "pagePath": "pages/index/index",
-        "text": "\u9996\u9875"
+        "text": "\u5546\u57ce"
+      },
+      {
+        "pagePath": "pages/benefits/benefits",
+        "text": "\u798f\u5229"
       },
       {
         "pagePath": "pages/orders/orders",

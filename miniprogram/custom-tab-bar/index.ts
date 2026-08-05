@@ -4,18 +4,23 @@ Component({
     tabs: [
       {
         pagePath: 'pages/index/index',
-        text: '首页',
-        icon: 'home',
+        text: '商城',
+        icon: { name: 'home-filled', size: 26 },
+      },
+      {
+        pagePath: 'pages/benefits/benefits',
+        text: '福利',
+        icon: { name: 'gift-filled', size: 26 },
       },
       {
         pagePath: 'pages/orders/orders',
         text: '订单',
-        icon: 'file-1',
+        icon: { name: 'bill-filled', size: 26 },
       },
       {
         pagePath: 'pages/mine/mine',
         text: '我的',
-        icon: 'user',
+        icon: { name: 'user-filled', size: 26 },
       },
     ],
   },

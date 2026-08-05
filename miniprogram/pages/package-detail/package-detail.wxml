@@ -1,4 +1,5 @@
-<view class="detail-page" style="--menu-button-bottom: {{menuButtonBottom}}px;">
+<network-error wx:if="{{networkError}}" bind:retry="retryNetwork" />
+<view class="detail-page" hidden="{{networkError}}" style="--menu-button-bottom: {{menuButtonBottom}}px;">
   <scroll-view class="detail-scroll" scroll-y enhanced show-scrollbar="{{false}}" bindscroll="onScroll">
     <view class="hero">
       <swiper class="hero-swiper" bindchange="onBannerChange">

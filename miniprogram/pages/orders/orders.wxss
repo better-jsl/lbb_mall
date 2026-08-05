@@ -4,41 +4,118 @@ page {
 }
 
 .orders-page {
-  min-height: 100vh;
-  padding: var(--menu-button-top) 32rpx calc(146rpx + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 0 32rpx calc(146rpx + env(safe-area-inset-bottom));
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .orders-header {
+  height: calc(var(--menu-button-top) + var(--menu-button-height) + 24rpx);
+  padding-top: var(--menu-button-top);
+  box-sizing: border-box;
+}
+
+.orders-title-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   height: var(--menu-button-height);
   color: #182743;
 }
 
 .orders-title {
-  font-size: 48rpx;
+  font-size: 36rpx;
   font-weight: 800;
-  line-height: var(--menu-button-height);
 }
 
 .orders-tabs {
-  margin-top: 28rpx;
+  margin-top: 12rpx;
   --td-brand-color: #182743;
   --td-tab-nav-bg-color: transparent;
   --td-bg-color-container: transparent;
+  --td-tab-border-color: transparent;
+  --td-tab-font: 34rpx / 48rpx PingFang SC, Microsoft YaHei, Arial, sans-serif;
+  --td-tab-item-height: 96rpx;
+  --td-tab-track-width: 64rpx;
+  --td-tab-track-thickness: 8rpx;
+  --td-tab-track-radius: 999rpx;
 }
 
 .order-list {
+  flex: 1;
+  min-height: 0;
   margin-top: 20rpx;
+}
+
+.order-load-status {
+  padding: 10rpx 0 22rpx;
+  color: #9aa3b2;
+  text-align: center;
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.list-refresher {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 0;
+  gap: 10rpx;
+  transform-origin: center bottom;
+  transition: opacity 120ms ease-out, transform 120ms ease-out;
+}
+
+.list-refresh-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: #182743;
+}
+
+.list-refresh-label {
+  margin-left: 8rpx;
+  color: #5d6a7e;
+  font-size: 21rpx;
+  line-height: 28rpx;
+}
+
+.list-refresher.is-refreshing .list-refresh-dot {
+  animation: refresh-dot-pulse 720ms ease-in-out infinite;
+}
+
+.list-refresher.is-refreshing .list-refresh-dot:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.list-refresher.is-refreshing .list-refresh-dot:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+@keyframes refresh-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.55);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
 }
 
 .order-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 150rpx;
+  min-height: 128rpx;
   margin-bottom: 20rpx;
-  padding: 24rpx 28rpx;
+  padding: 18rpx 24rpx;
   border-radius: 16rpx;
   background: #ffffff;
   box-shadow: 0 10rpx 28rpx rgba(24, 39, 67, 0.07);
@@ -50,8 +127,48 @@ page {
   flex-direction: column;
 }
 
+.order-content {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.order-cover-wrap {
+  display: flex;
+  flex: 0 0 92rpx;
+  width: 92rpx;
+  height: 92rpx;
+  overflow: hidden;
+  border-radius: 14rpx;
+  position: relative;
+}
+
+.order-cover,
+.order-cover-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: #eef2f7;
+}
+
+.order-cover-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(236, 239, 244, 0.48);
+}
+
+.order-main {
+  min-width: 0;
+  margin-left: 20rpx;
+}
+
 .order-title {
+  overflow: hidden;
   color: #182743;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 30rpx;
   font-weight: 700;
 }
@@ -72,29 +189,25 @@ page {
   font-weight: 800;
 }
 
-.order-status {
-  margin-top: 12rpx;
-  color: #17815d;
-  font-size: 24rpx;
+.order-card.is-expired .order-title,
+.order-card.is-expired .order-merchant,
+.order-card.is-expired .order-price {
+  color: #a6adba;
 }
 
 .order-enter {
-  animation: order-fade-in 320ms ease-out both;
+  animation: order-fade-in 340ms cubic-bezier(0.22, 0.8, 0.28, 1) both;
 }
 
 .order-prepared {
   opacity: 0;
-  transform: translateY(14rpx);
-}
-
-.order-enter:nth-child(2) {
-  animation-delay: 50ms;
+  transform: translateY(-38rpx);
 }
 
 @keyframes order-fade-in {
   from {
     opacity: 0;
-    transform: translateY(14rpx);
+    transform: translateY(-38rpx);
   }
 
   to {

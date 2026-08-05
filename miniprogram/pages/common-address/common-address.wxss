@@ -1,0 +1,135 @@
+page {
+  min-height: 100vh;
+  background: #f4f6fb;
+}
+
+.address-page {
+  min-height: 100vh;
+  padding: 0 32rpx calc(72rpx + env(safe-area-inset-bottom));
+  background: #f4f6fb;
+}
+
+.address-nav {
+  display: flex;
+  align-items: center;
+  height: calc(var(--menu-button-top) + var(--menu-button-height) + 38rpx);
+  padding-top: var(--menu-button-top);
+  box-sizing: border-box;
+}
+
+.address-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--menu-button-height);
+  height: var(--menu-button-height);
+}
+
+.address-title {
+  margin-left: 20rpx;
+  color: #182743;
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.address-form {
+  margin-top: 28rpx;
+  overflow: hidden;
+  border-radius: 20rpx;
+  background: #ffffff;
+  box-shadow: 0 12rpx 30rpx rgba(24, 39, 67, 0.07);
+}
+
+.address-region-picker {
+  display: block;
+}
+
+.address-field {
+  display: flex;
+  align-items: center;
+  min-height: 112rpx;
+  padding: 0 26rpx;
+}
+
+.address-field-pressed {
+  background: #f8f9fc;
+}
+
+.field-label {
+  flex: 0 0 142rpx;
+  color: #182743;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.field-value {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.field-selected,
+.field-placeholder {
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 26rpx;
+}
+
+.field-selected {
+  color: #182743;
+}
+
+.field-placeholder,
+.input-placeholder {
+  color: #9aa3b2;
+}
+
+.address-divider {
+  height: 1rpx;
+  margin-left: 26rpx;
+  background: #edf0f5;
+}
+
+.address-detail-field {
+  align-items: center;
+  min-height: 112rpx;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.detail-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 48rpx;
+  color: #182743;
+  font-size: 26rpx;
+  line-height: 48rpx;
+  text-align: right;
+}
+
+.save-address {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 250rpx;
+  margin-right: 0;
+  margin-left: auto;
+  height: 88rpx;
+  margin-top: 38rpx;
+  border: 0;
+  border-radius: 999rpx;
+  background: #182743;
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 800;
+  line-height: normal;
+  text-align: center;
+}
+
+.save-address::after {
+  border: 0;
+}

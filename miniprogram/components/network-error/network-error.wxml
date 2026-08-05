@@ -1,0 +1,6 @@
+<view class="network-error">
+  <view class="network-error-icon"><t-icon name="error-circle" size="76rpx" color="#7a8495" /></view>
+  <text class="network-error-title">网络异常</text>
+  <text class="network-error-description">请检查网络连接后重新加载</text>
+  <button class="network-error-retry" bindtap="retry">重新加载</button>
+</view>

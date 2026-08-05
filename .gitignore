@@ -1,2 +1,5 @@
 node_modules/
 .hbuilderx/
+.gocache/
+.go-cache/
+lbb-mall-api.exe

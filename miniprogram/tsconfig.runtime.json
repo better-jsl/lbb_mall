@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES5",
+    "lib": ["ES2015"],
     "module": "CommonJS",
     "strict": true,
     "noImplicitAny": true,
@@ -16,7 +17,11 @@
     "pages/index/index.ts",
     "pages/orders/orders.ts",
     "pages/order-detail/order-detail.ts",
+    "pages/benefits/benefits.ts",
+    "pages/daily-tasks/daily-tasks.ts",
+    "pages/game-points/game-points.ts",
     "pages/mine/mine.ts",
+    "pages/common-address/common-address.ts",
     "pages/package-detail/package-detail.ts",
     "pages/points-record/points-record.ts",
     "pages/coupons/coupons.ts"

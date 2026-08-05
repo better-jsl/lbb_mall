@@ -1,87 +1,34 @@
-type OrderContent = {
-  name: string
-  count: string
-  isPoints?: boolean
-}
+import { request } from '../../api/client'
 
-type StatusConfig = {
-  icon: string
-  note: string
-}
-
-const defaultContents: OrderContent[] = [
-  { name: '套餐商品', count: '1 份' },
-  { name: '到店专属服务', count: '1 次' },
-  { name: '赠送积分', count: '100', isPoints: true },
-]
-
-const contentsByTitle: Record<string, OrderContent[]> = {
-  '名仕洋酒套餐': [
-    { name: '名仕洋酒', count: '1 瓶' },
-    { name: '精选果盘', count: '1 份' },
-    { name: '小吃拼盘', count: '1 份' },
-    { name: '赠送积分', count: '1264', isPoints: true },
-  ],
-  '喜力啤酒套餐': [
-    { name: '喜力啤酒', count: '12 瓶' },
-    { name: '小吃拼盘', count: '1 份' },
-    { name: '赠送积分', count: '398', isPoints: true },
-  ],
-  '百威小酌套餐': [
-    { name: '百威啤酒', count: '6 瓶' },
-    { name: '限定小食', count: '1 份' },
-    { name: '赠送积分', count: '32', isPoints: true },
-  ],
-  '野格欢喜套餐': [
-    { name: '野格利口酒', count: '1 瓶' },
-    { name: '小吃拼盘', count: '1 份' },
-    { name: '赠送积分', count: '238', isPoints: true },
-  ],
-}
-
-const statusConfig: Record<string, StatusConfig> = {
-  '待核销': { icon: 'time', note: '请在有效期内到店使用' },
-  '已核销': { icon: 'check-circle', note: '该订单已完成核销' },
-  '已失效': { icon: 'close-circle', note: '该订单已超过有效期' },
-}
+type OrderContent = { name: string; count: string; isPoints?: boolean }
+type OrderDetail = { title: string; merchant: string; price: string; priceText: string; status: string; state: string; statusIcon: string; statusNote: string; canUsePoints: boolean; canVerify: boolean; sectionTitle: string; contents: OrderContent[]; orderNo: string; createdAt: string }
 
 Page({
-  data: {
-    menuButtonTop: 0,
-    menuButtonHeight: 0,
-    title: '',
-    merchant: '',
-    price: '',
-    status: '',
-    statusIcon: 'time',
-    statusNote: '',
-    canUsePoints: false,
-    contents: defaultContents,
-    orderNo: 'LBB202608031520',
-  },
-
+  data: { menuButtonTop: 0, menuButtonHeight: 0, orderID: '', title: '', merchant: '', price: '', priceText: '', status: '', state: '', statusIcon: 'time', statusNote: '', canUsePoints: false, canVerify: false, sectionTitle: '套餐信息', contents: [] as OrderContent[], orderNo: '', createdAt: '', networkError: false },
   onLoad(options: Record<string, string | undefined>) {
-    const app = getApp<IAppOption>()
-
-    const title = options.title ? decodeURIComponent(options.title) : ''
-    const status = options.status ? decodeURIComponent(options.status) : ''
-    const detailStatus = statusConfig[status] || statusConfig['待核销']
-
-    this.setData({
-      menuButtonTop: app.globalData.menuButtonTop,
-      menuButtonHeight: app.globalData.menuButtonHeight,
-      title,
-      merchant: options.merchant ? decodeURIComponent(options.merchant) : '',
-      price: options.price ? decodeURIComponent(options.price) : '',
-      status,
-      statusIcon: detailStatus.icon,
-      statusNote: detailStatus.note,
-      canUsePoints: status === '已核销',
-      contents: contentsByTitle[title] || defaultContents,
+    const app = getApp<IAppOption>(); const id = options.id ? decodeURIComponent(options.id) : ''
+    this.setData({ menuButtonTop: app.globalData.menuButtonTop, menuButtonHeight: app.globalData.menuButtonHeight, orderID: id })
+    if (id) this.loadOrder(id)
+  },
+  async loadOrder(id: string) { try { this.setData({ ...await request<OrderDetail>(`/orders/${id}`), networkError: false }) } catch { this.setData({ networkError: true }); wx.showToast({ title: '加载订单失败', icon: 'none' }) } },
+  retryNetwork() { if (this.data.orderID) { this.setData({ networkError: false }); this.loadOrder(this.data.orderID) } },
+  verifyOrder() {
+    wx.scanCode({
+      scanType: ['qrCode', 'barCode'],
+      success: async ({ result }) => {
+        try {
+          await request('/orders/verify', 'POST', { code: result, orderId: this.data.orderID })
+          wx.showToast({ title: '核销成功', icon: 'success' })
+          if (this.data.orderID) this.loadOrder(this.data.orderID)
+        } catch {
+          wx.showToast({ title: '核销失败', icon: 'none' })
+        }
+      },
     })
   },
-
-  goBack() {
-    wx.navigateBack()
+  openExchange() {
+    wx.setStorageSync('mallActiveTab', 'exchange')
+    wx.switchTab({ url: '/pages/index/index' })
   },
+  goBack() { wx.navigateBack() },
 })

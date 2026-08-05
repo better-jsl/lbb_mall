@@ -1,0 +1,27 @@
+services:
+  api:
+    build: .
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://lbb:${POSTGRES_PASSWORD}@postgres:5432/lbb_mall?sslmode=disable
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lbb_mall
+      POSTGRES_USER: lbb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lbb -d lbb_mall"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

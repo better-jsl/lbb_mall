@@ -1,0 +1,31 @@
+<network-error wx:if="{{networkError}}" bind:retry="retryNetwork" />
+<view class="game-page" hidden="{{networkError}}" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
+  <view class="game-header">
+    <view class="game-nav-row">
+      <view class="game-back" bindtap="goBack"><t-icon name="chevron-left" size="48rpx" color="#182743" /></view>
+      <text class="game-page-title">游戏赚积分</text>
+    </view>
+  </view>
+
+  <image class="game-hero" src="/assets/game-points-hero.png" mode="aspectFill" />
+
+  <scroll-view class="game-list" scroll-y enhanced show-scrollbar="{{false}}">
+    <view wx:for="{{games}}" wx:key="id" class="game-card" data-id="{{item.id}}" bindtap="chooseGame">
+      <view class="game-card-head">
+        <view class="game-icon {{item.tone}}"><text>{{item.emoji}}</text></view>
+        <view class="game-copy">
+          <view class="game-title-row"><text class="game-title">{{item.title}}</text><text class="game-rule">{{item.rule}}</text></view>
+          <text class="game-description">{{item.description}}</text>
+        </view>
+        <view class="game-limits">
+          <text class="game-limit">{{item.playLimit}}</text>
+          <text class="game-limit">{{item.teamLimit}}</text>
+        </view>
+      </view>
+      <view class="game-card-footer">
+        <view class="game-points"><text class="game-points-label">积分奖励</text><text class="game-points-value {{item.tone}}">{{item.points}}</text><text class="game-points-unit">积分</text></view>
+        <view class="game-start"><view class="game-start-glow"></view><text>开始游戏</text></view>
+      </view>
+    </view>
+  </scroll-view>
+</view>

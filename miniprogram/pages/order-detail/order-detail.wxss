@@ -5,7 +5,7 @@ page {
 
 .order-detail-page {
   min-height: 100vh;
-  padding: var(--menu-button-top) 32rpx calc(48rpx + env(safe-area-inset-bottom));
+  padding: var(--menu-button-top) 32rpx calc(168rpx + env(safe-area-inset-bottom));
 }
 
 .page-header {
@@ -160,8 +160,8 @@ page {
   height: 52rpx;
   border: 1rpx solid #182743;
   border-radius: 999rpx;
-  background: #ffffff;
-  color: #182743;
+  background: #182743;
+  color: #ffffff;
   font-size: 22rpx;
   font-weight: 700;
   white-space: nowrap;
@@ -190,4 +190,34 @@ page {
   color: #e4424a;
   font-size: 34rpx;
   font-weight: 900;
+}
+
+.verify-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 4;
+  padding: 18rpx 32rpx calc(18rpx + env(safe-area-inset-bottom));
+  background: transparent;
+}
+
+.verify-order-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 360rpx;
+  height: 88rpx;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 999rpx;
+  background: #182743;
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.verify-order-button::after {
+  border: 0;
 }

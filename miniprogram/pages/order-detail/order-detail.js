@@ -1,70 +1,45 @@
 "use strict";
-var defaultContents = [
-    { name: '套餐商品', count: '1 份' },
-    { name: '到店专属服务', count: '1 次' },
-    { name: '赠送积分', count: '100', isPoints: true },
-];
-var contentsByTitle = {
-    '名仕洋酒套餐': [
-        { name: '名仕洋酒', count: '1 瓶' },
-        { name: '精选果盘', count: '1 份' },
-        { name: '小吃拼盘', count: '1 份' },
-        { name: '赠送积分', count: '1264', isPoints: true },
-    ],
-    '喜力啤酒套餐': [
-        { name: '喜力啤酒', count: '12 瓶' },
-        { name: '小吃拼盘', count: '1 份' },
-        { name: '赠送积分', count: '398', isPoints: true },
-    ],
-    '百威小酌套餐': [
-        { name: '百威啤酒', count: '6 瓶' },
-        { name: '限定小食', count: '1 份' },
-        { name: '赠送积分', count: '32', isPoints: true },
-    ],
-    '野格欢喜套餐': [
-        { name: '野格利口酒', count: '1 瓶' },
-        { name: '小吃拼盘', count: '1 份' },
-        { name: '赠送积分', count: '238', isPoints: true },
-    ],
-};
-var statusConfig = {
-    '待核销': { icon: 'time', note: '请在有效期内到店使用' },
-    '已核销': { icon: 'check-circle', note: '该订单已完成核销' },
-    '已失效': { icon: 'close-circle', note: '该订单已超过有效期' },
-};
+Object.defineProperty(exports, "__esModule", { value: true });
+const client_1 = require("../../api/client");
 Page({
-    data: {
-        menuButtonTop: 0,
-        menuButtonHeight: 0,
-        title: '',
-        merchant: '',
-        price: '',
-        status: '',
-        statusIcon: 'time',
-        statusNote: '',
-        canUsePoints: false,
-        contents: defaultContents,
-        orderNo: 'LBB202608031520',
+    data: { menuButtonTop: 0, menuButtonHeight: 0, orderID: '', title: '', merchant: '', price: '', priceText: '', status: '', state: '', statusIcon: 'time', statusNote: '', canUsePoints: false, canVerify: false, sectionTitle: '套餐信息', contents: [], orderNo: '', createdAt: '', networkError: false },
+    onLoad(options) {
+        const app = getApp();
+        const id = options.id ? decodeURIComponent(options.id) : '';
+        this.setData({ menuButtonTop: app.globalData.menuButtonTop, menuButtonHeight: app.globalData.menuButtonHeight, orderID: id });
+        if (id)
+            this.loadOrder(id);
     },
-    onLoad: function (options) {
-        var app = getApp();
-        var title = options.title ? decodeURIComponent(options.title) : '';
-        var status = options.status ? decodeURIComponent(options.status) : '';
-        var detailStatus = statusConfig[status] || statusConfig['待核销'];
-        this.setData({
-            menuButtonTop: app.globalData.menuButtonTop,
-            menuButtonHeight: app.globalData.menuButtonHeight,
-            title: title,
-            merchant: options.merchant ? decodeURIComponent(options.merchant) : '',
-            price: options.price ? decodeURIComponent(options.price) : '',
-            status: status,
-            statusIcon: detailStatus.icon,
-            statusNote: detailStatus.note,
-            canUsePoints: status === '已核销',
-            contents: contentsByTitle[title] || defaultContents,
+    async loadOrder(id) { try {
+        this.setData({ ...await (0, client_1.request)(`/orders/${id}`), networkError: false });
+    }
+    catch {
+        this.setData({ networkError: true });
+        wx.showToast({ title: '加载订单失败', icon: 'none' });
+    } },
+    retryNetwork() { if (this.data.orderID) {
+        this.setData({ networkError: false });
+        this.loadOrder(this.data.orderID);
+    } },
+    verifyOrder() {
+        wx.scanCode({
+            scanType: ['qrCode', 'barCode'],
+            success: async ({ result }) => {
+                try {
+                    await (0, client_1.request)('/orders/verify', 'POST', { code: result, orderId: this.data.orderID });
+                    wx.showToast({ title: '核销成功', icon: 'success' });
+                    if (this.data.orderID)
+                        this.loadOrder(this.data.orderID);
+                }
+                catch {
+                    wx.showToast({ title: '核销失败', icon: 'none' });
+                }
+            },
         });
     },
-    goBack: function () {
-        wx.navigateBack();
+    openExchange() {
+        wx.setStorageSync('mallActiveTab', 'exchange');
+        wx.switchTab({ url: '/pages/index/index' });
     },
+    goBack() { wx.navigateBack(); },
 });

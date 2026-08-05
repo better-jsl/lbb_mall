@@ -18,7 +18,7 @@ page {
 
 .hero {
   position: relative;
-  height: calc(540rpx + var(--menu-button-bottom));
+  height: calc(460rpx + var(--menu-button-bottom));
   overflow: hidden;
   background: #182743;
 }
@@ -39,19 +39,20 @@ page {
   bottom: 0;
   left: 0;
   z-index: 1;
-  height: 56%;
+  height: 38%;
   pointer-events: none;
   background: linear-gradient(180deg, rgba(244, 246, 251, 0), #f4f6fb 96%);
 }
 
 .hero-indicators {
   position: absolute;
-  right: 36rpx;
-  bottom: 150rpx;
+  bottom: 128rpx;
+  left: 50%;
   z-index: 2;
   display: flex;
   align-items: center;
   gap: 10rpx;
+  transform: translateX(-50%);
 }
 
 .hero-indicator {

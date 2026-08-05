@@ -1,10 +1,12 @@
-<view class="mine-page" style="--menu-button-bottom: {{menuButtonBottom}}px;">
+<network-error wx:if="{{networkError}}" bind:retry="retryNetwork" />
+<view class="mine-page" hidden="{{networkError}}" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px; --menu-button-bottom: {{menuButtonBottom}}px;">
+  <view class="mine-header"><view class="mine-title-row"><text class="mine-page-title">我的</text></view></view>
   <view class="profile">
     <view class="avatar">
       <t-icon name="user" size="56rpx" color="#ffffff" />
     </view>
     <view class="profile-text">
-      <text class="nickname">乐伴伴会员</text>
+      <text class="nickname">{{nickname || '乐伴伴会员'}}</text>
       <text class="profile-subtitle">精选酒吧套餐与专属服务</text>
     </view>
     <view class="verification-action">
@@ -29,11 +31,12 @@
   </view>
 
   <view class="entry-list">
-    <view wx:for="{{entries}}" wx:key="label" class="entry-item">
+    <view wx:for="{{entries}}" wx:key="label" class="entry-item" data-route="{{item.route}}" bindtap="openEntry">
       <view class="entry-icon">
         <t-icon name="{{item.icon}}" size="38rpx" color="#182743" />
       </view>
-      <text>{{item.label}}</text>
+      <text class="entry-label">{{item.label}}</text>
+      <text wx:if="{{item.route === 'address' && addressSummary}}" class="entry-summary">{{addressSummary}}</text>
       <t-icon name="chevron-right" size="34rpx" color="#9aa3b2" />
     </view>
   </view>

@@ -1,4 +1,0 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const props = { closeOnClickOutside: { type: Boolean, value: !0 }, content: { type: String }, fixed: { type: Boolean, value: !1 }, placement: { type: String, value: "top" }, showArrow: { type: Boolean, value: !0 }, theme: { type: String, value: "dark" }, visible: { type: Boolean, value: null }, defaultVisible: { type: Boolean } };
-exports.default = props;

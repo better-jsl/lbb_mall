@@ -1,0 +1,36 @@
+<network-error wx:if="{{networkError}}" bind:retry="retryNetwork" />
+<view class="address-page" hidden="{{networkError}}" style="--menu-button-top: {{menuButtonTop}}px; --menu-button-height: {{menuButtonHeight}}px;">
+  <view class="address-nav">
+    <view class="address-back" bindtap="goBack"><t-icon name="chevron-left" size="48rpx" color="#182743" /></view>
+    <text class="address-title">地址设置</text>
+  </view>
+
+  <view class="address-form">
+    <view class="address-field address-detail-field">
+      <text class="field-label">联系人</text>
+      <input class="detail-input" value="{{contactName}}" maxlength="20" placeholder="请填写联系人" placeholder-class="input-placeholder" bindinput="onContactNameInput" />
+    </view>
+    <view class="address-divider"></view>
+    <view class="address-field address-detail-field">
+      <text class="field-label">联系人电话</text>
+      <input class="detail-input" value="{{contactPhone}}" type="number" maxlength="11" placeholder="请填写联系电话" placeholder-class="input-placeholder" bindinput="onContactPhoneInput" />
+    </view>
+    <view class="address-divider"></view>
+    <picker class="address-region-picker" mode="region" value="{{region}}" bindchange="onRegionChange">
+      <view class="address-field address-region-field" hover-class="address-field-pressed">
+        <text class="field-label">所在地区</text>
+        <view class="field-value">
+          <text class="{{regionText ? 'field-selected' : 'field-placeholder'}}">{{regionText || '请选择省、市、区县'}}</text>
+          <t-icon name="chevron-right" size="34rpx" color="#9aa3b2" />
+        </view>
+      </view>
+    </picker>
+    <view class="address-divider"></view>
+    <view class="address-field address-detail-field">
+      <text class="field-label">详细地址</text>
+      <input class="detail-input" value="{{detailAddress}}" maxlength="80" placeholder="街道、门牌号、楼栋等" placeholder-class="input-placeholder" bindinput="onDetailInput" />
+    </view>
+  </view>
+
+  <button class="save-address" bindtap="saveAddress">保存地址</button>
+</view>
