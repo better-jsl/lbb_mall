@@ -26,33 +26,33 @@ Component({
         ],
     },
     lifetimes: {
-        attached() {
+        attached: function () {
             this.updateSelected();
         },
     },
     pageLifetimes: {
-        show() {
+        show: function () {
             this.updateSelected();
         },
     },
     methods: {
-        updateSelected() {
-            const pages = getCurrentPages();
-            const currentPage = pages[pages.length - 1];
-            const currentRoute = currentPage ? currentPage.route : '';
-            const selected = this.data.tabs.findIndex((item) => item.pagePath === currentRoute);
+        updateSelected: function () {
+            var pages = getCurrentPages();
+            var currentPage = pages[pages.length - 1];
+            var currentRoute = currentPage ? currentPage.route : '';
+            var selected = this.data.tabs.findIndex(function (item) { return item.pagePath === currentRoute; });
             if (selected >= 0) {
-                this.setData({ selected });
+                this.setData({ selected: selected });
             }
         },
-        onTabChange(event) {
-            const index = Number(event.detail.value);
-            const tab = this.data.tabs[index];
+        onTabChange: function (event) {
+            var index = Number(event.detail.value);
+            var tab = this.data.tabs[index];
             if (!tab) {
                 return;
             }
             this.setData({ selected: index });
-            wx.switchTab({ url: `/${tab.pagePath}` });
+            wx.switchTab({ url: "/".concat(tab.pagePath) });
         },
     },
 });

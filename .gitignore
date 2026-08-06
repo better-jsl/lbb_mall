@@ -3,3 +3,4 @@ node_modules/
 .gocache/
 .go-cache/
 lbb-mall-api.exe
+backend/.env

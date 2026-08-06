@@ -10,7 +10,9 @@ type Model struct {
 type Merchant struct {
 	ID         string `gorm:"primaryKey"`
 	Name       string
+	Subtitle   string
 	Pinyin     string
+	Location   string
 	DistanceKM float64
 	SortOrder  int
 	Model
@@ -48,7 +50,8 @@ type Order struct {
 }
 
 type Profile struct {
-	ID        string `gorm:"primaryKey"`
+	ID        string  `gorm:"primaryKey"`
+	OpenID    *string `gorm:"index"`
 	Nickname  string
 	Avatar    string
 	Phone     string
@@ -92,16 +95,17 @@ type PointRecord struct {
 	Model
 }
 type Coupon struct {
-	ID        string  `gorm:"primaryKey"`
-	UserID    string  `gorm:"index"`
-	User      Profile `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	Value     float64
-	Title     string
-	Note      string
-	DateText  string
-	Status    string
-	State     string
-	SortOrder int
+	ID           string  `gorm:"primaryKey"`
+	UserID       string  `gorm:"index"`
+	User         Profile `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	RedemptionID string  `gorm:"index"`
+	Value        float64
+	Title        string
+	Note         string
+	DateText     string
+	Status       string
+	State        string
+	SortOrder    int
 	Model
 }
 
@@ -109,6 +113,7 @@ type PointsCategory struct {
 	ID        string `gorm:"primaryKey"`
 	Label     string `gorm:"not null"`
 	Emoji     string
+	Image     string
 	SortOrder int
 	Active    bool `gorm:"not null;default:true"`
 	Model
@@ -141,6 +146,7 @@ type PointsRedemption struct {
 	PointsCost      int           `gorm:"not null"`
 	Status          string        `gorm:"not null"`
 	AddressSnapshot string        `gorm:"type:jsonb"`
+	AppPhone        string
 	Model
 }
 

@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Edit3,
   Gift,
   Gamepad2,
@@ -41,7 +42,6 @@ const emptyPackage = (merchantId = '') => ({
 })
 
 const redemptionMethods = ['现场核销', '快递邮寄', 'APP抵用券']
-const categoryIconOptions = ['🎁', '🍷', '☕', '🎫', '🎤', '✨']
 
 const chartColors = ['#182743', '#ffb000', '#00bcd4', '#ff4f8b']
 const chartGradients = [
@@ -159,9 +159,14 @@ function MerchantPage() {
   const [selectedMerchantID, setSelectedMerchantID] = useState('')
   const [dragMerchant, setDragMerchant] = useState<DragMerchant | null>(null)
   const [dragPackage, setDragPackage] = useState<DragPackage | null>(null)
+  const [merchantTabsExpanded, setMerchantTabsExpanded] = useState(false)
+  const [merchantTabsOverflow, setMerchantTabsOverflow] = useState(false)
+  const [merchantTabsCollapsing, setMerchantTabsCollapsing] = useState(false)
+  const [merchantTabsHeight, setMerchantTabsHeight] = useState<number | null>(null)
   const merchantsRef = useRef<Merchant[]>([])
   const dragMerchantRef = useRef<DragMerchant | null>(null)
   const dragPackageRef = useRef<DragPackage | null>(null)
+  const merchantTabsRef = useRef<HTMLElement | null>(null)
 
   const refresh = async () => {
     setLoading(true)
@@ -172,8 +177,45 @@ function MerchantPage() {
   useEffect(() => {
     if (!merchants.some((merchant) => merchant.id === selectedMerchantID)) setSelectedMerchantID(merchants[0]?.id || '')
   }, [merchants, selectedMerchantID])
+  useEffect(() => {
+    if (merchantTabsExpanded) return
+    const tabs = merchantTabsRef.current
+    if (!tabs) return
+    const measure = () => setMerchantTabsOverflow(tabs.scrollWidth > tabs.clientWidth + 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(tabs)
+    return () => observer.disconnect()
+  }, [merchants, merchantTabsExpanded])
 
   const selectedMerchant = merchants.find((merchant) => merchant.id === selectedMerchantID) || merchants[0]
+
+  const toggleMerchantTabs = () => {
+    const tabs = merchantTabsRef.current
+    if (!tabs || merchantTabsHeight !== null) return
+    if (merchantTabsExpanded) {
+      const collapsedHeight = tabs.querySelector<HTMLElement>('.merchant-tab')?.offsetHeight || tabs.offsetHeight
+      setMerchantTabsHeight(tabs.offsetHeight)
+      setMerchantTabsCollapsing(true)
+      requestAnimationFrame(() => setMerchantTabsHeight(collapsedHeight))
+      return
+    }
+    setMerchantTabsHeight(tabs.offsetHeight)
+    setMerchantTabsExpanded(true)
+    requestAnimationFrame(() => {
+      const expandedTabs = merchantTabsRef.current
+      if (expandedTabs) setMerchantTabsHeight(expandedTabs.scrollHeight)
+    })
+  }
+
+  const finishMerchantTabsAnimation = (event: React.TransitionEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget || event.propertyName !== 'height') return
+    if (merchantTabsCollapsing) {
+      setMerchantTabsExpanded(false)
+      setMerchantTabsCollapsing(false)
+    }
+    setMerchantTabsHeight(null)
+  }
 
   const beginMerchantDrag = (merchantId: string) => {
     const state = { id: merchantId, startIds: merchantsRef.current.map((item) => item.id) }
@@ -250,7 +292,7 @@ function MerchantPage() {
   return <>
     {loading ? <Loading /> : <>
       <div className="merchant-tabs-row">
-      <section className="merchant-tabs" role="tablist" aria-label="商家列表">
+      <section ref={merchantTabsRef} className={`merchant-tabs merchant-tabs-merchants${merchantTabsExpanded ? ' expanded' : ''}`} style={merchantTabsHeight === null ? undefined : { height: merchantTabsHeight }} onTransitionEnd={finishMerchantTabsAnimation} role="tablist" aria-label="商家列表">
         {merchants.map((merchant) => <button
           className={`merchant-tab${merchant.id === selectedMerchant?.id ? ' active' : ''}${dragMerchant?.id === merchant.id ? ' dragging' : ''}`}
           key={merchant.id}
@@ -263,8 +305,9 @@ function MerchantPage() {
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => event.preventDefault()}
           onDragEnd={() => void finishMerchantDrag()}
-        ><GripVertical size={16} /><span>{merchant.name}</span><small>{merchant.packages.length}</small></button>)}
+        ><GripVertical size={16} /><span className="merchant-tab-copy"><span>{merchant.name}</span>{merchant.subtitle && <span className="merchant-tab-subtitle">{merchant.subtitle}</span>}</span><small>{merchant.packages.length}</small></button>)}
       </section>
+      {merchantTabsOverflow && <button className="quiet-button merchant-tabs-toggle" type="button" aria-expanded={merchantTabsExpanded} disabled={merchantTabsHeight !== null} onClick={toggleMerchantTabs}>{merchantTabsExpanded ? '收起' : '全部'}{merchantTabsExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>}
       <div className="merchant-tab-actions"><IconButton label="刷新商家列表" onClick={() => void refresh()}><RefreshCw size={18} /></IconButton><button className="primary-button" onClick={() => setMerchantDraft(null)}><Plus size={18} />新增商家</button></div>
       </div>
       {selectedMerchant && <section className="selected-merchant" aria-label={`${selectedMerchant.name}套餐列表`}>
@@ -296,13 +339,16 @@ function MerchantPage() {
 function MerchantModal({ value, onClose, onSaved }: { value: Merchant | null; onClose: () => void; onSaved: () => Promise<void> }) {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const name = String(new FormData(event.currentTarget).get('name') || '').trim()
+    const form = new FormData(event.currentTarget)
+    const name = String(form.get('name') || '').trim()
     try {
-      await api(value ? `/merchants/${value.id}` : '/merchants', value ? 'PATCH' : 'POST', { name })
+      const subtitle = String(form.get('subtitle') || '').trim()
+      const location = String(form.get('location') || '').trim()
+      await api(value ? `/merchants/${value.id}` : '/merchants', value ? 'PATCH' : 'POST', { name, subtitle, location })
       await onSaved(); onClose()
     } catch (error) { alertMessage(error) }
   }
-  return <Modal title={value ? '编辑商家' : '新增商家'} onClose={onClose}><form onSubmit={submit} className="form-grid"><Field label="商家名称"><input name="name" defaultValue={value?.name || ''} autoFocus required /></Field><FormActions onClose={onClose} /></form></Modal>
+  return <Modal title={value ? '编辑商家' : '新增商家'} onClose={onClose}><form onSubmit={submit} className="form-grid"><Field label="商家名称"><input name="name" defaultValue={value?.name || ''} autoFocus required /></Field><Field label="次标题"><input name="subtitle" defaultValue={value?.subtitle || ''} placeholder="如：KTV 欢唱空间" /></Field><Field label="位置"><input name="location" defaultValue={value?.location || ''} placeholder="请填写经纬度" /></Field><FormActions onClose={onClose} /></form></Modal>
 }
 
 function PackageModal({ merchantId, value, onClose, onSaved }: { merchantId: string; value: Partial<AdminPackage>; onClose: () => void; onSaved: () => Promise<void> }) {
@@ -552,7 +598,7 @@ function PointsMallPage() {
             role="tab"
             aria-selected={category.id === activeCategory}
             onClick={() => setActiveCategory(category.id)}
-          ><span className="category-tab-icon">{category.emoji || '🎁'}</span><span>{category.label}</span><small>{count}</small></button>
+          >{category.image ? <img className="category-tab-image" src={category.image} alt="" /> : <span className="category-tab-icon">{category.emoji || '🎁'}</span>}<span>{category.label}</span><small>{count}</small></button>
         })}
       </section>
       <div className="merchant-tab-actions">
@@ -682,18 +728,32 @@ function GameModal({ value, onClose, onSaved }: { value: AdminGame | undefined; 
 }
 
 function PointsCategoryModal({ value, onClose, onSaved }: { value: PointsCategory | undefined; onClose: () => void; onSaved: (category: PointsCategory) => Promise<void> }) {
-  const [emoji, setEmoji] = useState(value?.emoji || categoryIconOptions[0])
+  const [image, setImage] = useState(value?.image || '')
+  const [uploading, setUploading] = useState(false)
+
+  const upload = async (files: FileList | null) => {
+    if (!files?.length) return
+    setUploading(true)
+    try {
+      const urls = await uploadImages(files)
+      setImage(urls[0] || '')
+    } catch (error) {
+      alertMessage(error)
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const label = String(new FormData(event.currentTarget).get('label') || '').trim()
     if (!label) { alertMessage(new Error('分类名称不能为空')); return }
-    try { await onSaved({ id: value?.id || '', label, emoji }); onClose() } catch (error) { alertMessage(error) }
+    try { await onSaved({ id: value?.id || '', label, emoji: value?.emoji || '🎁', image }); onClose() } catch (error) { alertMessage(error) }
   }
 
   return <Modal title={value ? '编辑积分分类' : '新增积分分类'} onClose={onClose}><form onSubmit={submit} className="form-grid">
     <Field label="分类名称"><input name="label" defaultValue={value?.label || ''} autoFocus required /></Field>
-    <Field label="分类图标"><div className="category-icon-options" role="radiogroup" aria-label="分类图标">{categoryIconOptions.map((icon) => <button className={emoji === icon ? 'active' : ''} key={icon} type="button" role="radio" aria-checked={emoji === icon} onClick={() => setEmoji(icon)}>{icon}</button>)}</div></Field>
+    <Field label="分类图片" hint="*方形图"><label className="image-upload-tile" title="选择分类图片"><input type="file" accept="image/*" onChange={(event) => void upload(event.target.files)} disabled={uploading} />{image ? <img src={image} alt="分类图片预览" /> : <ImagePlus size={24} />}</label></Field>
     <FormActions onClose={onClose} />
   </form></Modal>
 }
@@ -734,7 +794,7 @@ function PointsItemModal({ categories, activeCategory, value, onClose, onSaved }
     } catch (error) { alertMessage(error) }
   }
 
-  return <Modal title={value ? '编辑兑换物品' : '新增兑换物品'} onClose={onClose}><form onSubmit={submit} className="form-grid">
+  return <Modal title={value ? '编辑兑换物品' : '新增兑换物品'} onClose={onClose}><form onSubmit={submit} className="form-grid points-item-form">
     <Field label="所属分类"><PointsCategorySelect categories={categories} value={category} onChange={setCategory} /></Field>
     <Field label="标题" hint="请填写兑换物品标题"><input name="title" defaultValue={value?.title || ''} autoFocus required /></Field>
     <Field label="所需积分"><input name="points" type="number" min="0" step="1" defaultValue={value?.points ?? 0} required /></Field>

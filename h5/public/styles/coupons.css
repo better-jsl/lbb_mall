@@ -31,14 +31,11 @@
 }
 
 .coupon-tabs {
-  margin-top: calc(30 * 100vw / 750);
-  --td-brand-color: #182743;
-  --td-tab-nav-bg-color: transparent;
-  --td-bg-color-container: transparent;
+  margin-top: 8px;
 }
 
 .coupon-list {
-  margin-top: calc(24 * 100vw / 750);
+  margin-top: 0;
 }
 
 .coupon-card {
@@ -119,6 +116,101 @@
 .coupon-card.used .coupon-value,
 .coupon-card.used .coupon-state {
   color: #7a8495;
+}
+
+.coupon-card.is-app-voucher {
+  cursor: pointer;
+}
+
+.coupon-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(48 * 100vw / 750);
+  background: rgba(24, 39, 67, 0.18);
+  box-sizing: border-box;
+}
+
+.coupon-dialog-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.coupon-dialog-close {
+  position: absolute;
+  top: calc(-72 * 100vw / 750);
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(52 * 100vw / 750);
+  height: calc(52 * 100vw / 750);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: #5d6a7e;
+  font-size: calc(40 * 100vw / 750);
+  line-height: 1;
+}
+
+.coupon-dialog {
+  width: 100%;
+  padding: calc(44 * 100vw / 750) calc(40 * 100vw / 750) calc(36 * 100vw / 750);
+  border-radius: calc(32 * 100vw / 750);
+  background: #ffffff;
+  box-shadow: 0 calc(24 * 100vw / 750) calc(64 * 100vw / 750) rgba(24, 39, 67, 0.2);
+  box-sizing: border-box;
+}
+
+.coupon-dialog-title {
+  display: block;
+  color: #182743;
+  text-align: center;
+  font-size: calc(34 * 100vw / 750);
+  font-weight: 800;
+}
+
+.coupon-dialog-warning {
+  display: block;
+  margin-top: calc(16 * 100vw / 750);
+  color: #e34d59;
+  text-align: center;
+  font-size: calc(23 * 100vw / 750);
+  line-height: calc(36 * 100vw / 750);
+}
+
+.coupon-phone-input {
+  width: 100%;
+  height: calc(84 * 100vw / 750);
+  margin-top: calc(20 * 100vw / 750);
+  padding: 0 calc(24 * 100vw / 750);
+  border: 0;
+  border-radius: calc(16 * 100vw / 750);
+  background: #f1f3f6;
+  outline: none;
+  box-sizing: border-box;
+  color: #182743;
+  font-size: calc(28 * 100vw / 750);
+}
+
+.coupon-dialog-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: calc(88 * 100vw / 750);
+  margin-top: calc(34 * 100vw / 750);
+  border: 0;
+  border-radius: calc(44 * 100vw / 750);
+  background: #182743;
+  color: #ffffff;
+  font-size: calc(30 * 100vw / 750);
+  font-weight: 800;
 }
 
 .coupon-card.expired .coupon-value,

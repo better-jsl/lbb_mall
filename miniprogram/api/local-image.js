@@ -1,35 +1,35 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.localImagePaths = exports.localImagePath = void 0;
-const imagePathCache = {};
-let fileSequence = 0;
+var imagePathCache = {};
+var fileSequence = 0;
 function localImagePath(url) {
     if (!url || url.indexOf('http') !== 0 || imagePathCache[url])
         return Promise.resolve(imagePathCache[url] || url);
-    return new Promise((resolve) => {
+    return new Promise(function (resolve) {
         wx.request({
-            url,
+            url: url,
             responseType: 'arraybuffer',
-            success(response) {
+            success: function (response) {
                 if (response.statusCode < 200 || response.statusCode >= 300) {
                     resolve(url);
                     return;
                 }
-                const extension = (url.match(/\.(png|jpe?g|webp)(?:\?.*)?$/i) || [])[1] || 'jpg';
-                const filePath = `${wx.env.USER_DATA_PATH}/lbb-image-${Date.now()}-${fileSequence += 1}.${extension}`;
+                var extension = (url.match(/\.(png|jpe?g|webp)(?:\?.*)?$/i) || [])[1] || 'jpg';
+                var filePath = "".concat(wx.env.USER_DATA_PATH, "/lbb-image-").concat(Date.now(), "-").concat(fileSequence += 1, ".").concat(extension);
                 wx.getFileSystemManager().writeFile({
-                    filePath,
+                    filePath: filePath,
                     data: response.data,
-                    success() {
+                    success: function () {
                         imagePathCache[url] = filePath;
                         resolve(filePath);
                     },
-                    fail() {
+                    fail: function () {
                         resolve(url);
                     },
                 });
             },
-            fail() {
+            fail: function () {
                 resolve(url);
             },
         });
@@ -37,6 +37,6 @@ function localImagePath(url) {
 }
 exports.localImagePath = localImagePath;
 function localImagePaths(urls) {
-    return Promise.all(urls.map((url) => localImagePath(url)));
+    return Promise.all(urls.map(function (url) { return localImagePath(url); }));
 }
 exports.localImagePaths = localImagePaths;

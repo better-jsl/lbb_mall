@@ -1,7 +1,54 @@
 "use strict";
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (g && (g = 0, op[0] && (_ = 0)), _) try {
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const client_1 = require("../../api/client");
-const local_image_1 = require("../../api/local-image");
+var client_1 = require("../../api/client");
+var local_image_1 = require("../../api/local-image");
 Page({
     data: {
         menuButtonBottom: 0, menuButtonTop: 0, menuButtonHeight: 0, navOpacity: 0, activeBanner: 0,
@@ -9,40 +56,66 @@ Page({
         title: '', price: '', points: '', contents: [], notices: [],
         networkError: false,
     },
-    onLoad(options) {
-        const app = getApp();
-        const packageID = options.id ? decodeURIComponent(options.id) : '';
-        this.setData({ menuButtonBottom: app.globalData.menuButtonBottom, menuButtonTop: app.globalData.menuButtonTop, menuButtonHeight: app.globalData.menuButtonHeight, packageID });
+    onLoad: function (options) {
+        var app = getApp();
+        var packageID = options.id ? decodeURIComponent(options.id) : '';
+        this.setData({ menuButtonBottom: app.globalData.menuButtonBottom, menuButtonTop: app.globalData.menuButtonTop, menuButtonHeight: app.globalData.menuButtonHeight, packageID: packageID });
         if (packageID)
             this.loadPackage(packageID);
     },
-    async loadPackage(packageID) {
-        try {
-            const detail = await (0, client_1.request)(`/packages/${packageID}`);
-            const bannerImages = await (0, local_image_1.localImagePaths)(detail.images.length ? detail.images : detail.coverImage ? [detail.coverImage] : []);
-            this.setData({ ...detail, bannerImages, activeBanner: 0, networkError: false });
-        }
-        catch {
-            this.setData({ networkError: true });
-            wx.showToast({ title: '加载套餐失败', icon: 'none' });
-        }
+    loadPackage: function (packageID) {
+        return __awaiter(this, void 0, void 0, function () {
+            var detail, bannerImages, _a;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _b.trys.push([0, 3, , 4]);
+                        return [4 /*yield*/, (0, client_1.request)("/packages/".concat(packageID))];
+                    case 1:
+                        detail = _b.sent();
+                        return [4 /*yield*/, (0, local_image_1.localImagePaths)(detail.images.length ? detail.images : detail.coverImage ? [detail.coverImage] : [])];
+                    case 2:
+                        bannerImages = _b.sent();
+                        this.setData(__assign(__assign({}, detail), { bannerImages: bannerImages, activeBanner: 0, networkError: false }));
+                        return [3 /*break*/, 4];
+                    case 3:
+                        _a = _b.sent();
+                        this.setData({ networkError: true });
+                        wx.showToast({ title: '加载套餐失败', icon: 'none' });
+                        return [3 /*break*/, 4];
+                    case 4: return [2 /*return*/];
+                }
+            });
+        });
     },
-    retryNetwork() { if (this.data.packageID) {
+    retryNetwork: function () { if (this.data.packageID) {
         this.setData({ networkError: false });
         this.loadPackage(this.data.packageID);
     } },
-    onScroll(event) { const navOpacity = Math.min(event.detail.scrollTop / 160, 1); if (Math.abs(this.data.navOpacity - navOpacity) > 0.01)
-        this.setData({ navOpacity }); },
-    onBannerChange(event) { this.setData({ activeBanner: event.detail.current }); },
-    previewBanner(event) { wx.previewImage({ current: String(event.currentTarget.dataset.current), urls: this.data.bannerImages }); },
-    goBack() { wx.navigateBack(); },
-    async buyNow() {
-        try {
-            await (0, client_1.request)('/orders', 'POST', { packageId: this.data.packageID });
-            wx.showToast({ title: '下单成功', icon: 'success' });
-        }
-        catch {
-            wx.showToast({ title: '下单失败', icon: 'none' });
-        }
+    onScroll: function (event) { var navOpacity = Math.min(event.detail.scrollTop / 160, 1); if (Math.abs(this.data.navOpacity - navOpacity) > 0.01)
+        this.setData({ navOpacity: navOpacity }); },
+    onBannerChange: function (event) { this.setData({ activeBanner: event.detail.current }); },
+    previewBanner: function (event) { wx.previewImage({ current: String(event.currentTarget.dataset.current), urls: this.data.bannerImages }); },
+    goBack: function () { wx.navigateBack(); },
+    buyNow: function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var _a;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _b.trys.push([0, 2, , 3]);
+                        return [4 /*yield*/, (0, client_1.request)('/orders', 'POST', { packageId: this.data.packageID })];
+                    case 1:
+                        _b.sent();
+                        wx.showToast({ title: '下单成功', icon: 'success' });
+                        return [3 /*break*/, 3];
+                    case 2:
+                        _a = _b.sent();
+                        wx.showToast({ title: '下单失败', icon: 'none' });
+                        return [3 /*break*/, 3];
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
     },
 });

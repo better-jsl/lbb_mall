@@ -9,9 +9,12 @@ import {
   EyeOff,
   Gift,
   Home,
+  ImageOff,
+  Mail,
   MapPin,
   ReceiptText,
   ScanLine,
+  Smartphone,
   UserRound,
   createIcons,
 } from 'lucide'
@@ -22,12 +25,15 @@ const app = document.querySelector('#app')
 const toastElement = document.querySelector('#toast')
 const apiOrigin = `${location.protocol}//${location.hostname}:8080`
 const apiBase = `${apiOrigin}/api/v1`
-const icons = { Bell, ChevronLeft, ChevronRight, CircleCheck, CircleX, ClipboardList, Clock3, EyeOff, Gift, Home, MapPin, ReceiptText, ScanLine, UserRound }
+const authTokenKey = 'lbb-auth-token'
+const icons = { Bell, ChevronLeft, ChevronRight, CircleCheck, CircleX, ClipboardList, Clock3, EyeOff, Gift, Home, ImageOff, Mail, MapPin, ReceiptText, ScanLine, Smartphone, UserRound }
 let cleanupPage = () => {}
 let toastTimer = 0
 let routeVersion = 0
+let authToken = localStorage.getItem(authTokenKey) || ''
 
 const routes = {
+  login: { style: 'login', render: renderLogin },
   mall: { style: 'index', render: renderMall },
   package: { style: 'package-detail', render: renderPackageDetail },
   benefits: { style: 'benefits', render: renderBenefits },
@@ -80,9 +86,12 @@ function errorMessage(error, fallback) {
 }
 
 async function request(path, method = 'GET', data) {
+  const headers = {}
+  if (data) headers['Content-Type'] = 'application/json'
+  if (authToken) headers.Authorization = `Bearer ${authToken}`
   const response = await fetch(`${apiBase}${path}`, {
     method,
-    headers: data ? { 'Content-Type': 'application/json' } : undefined,
+    headers,
     body: data ? JSON.stringify(data) : undefined,
   })
   let payload = null
@@ -91,8 +100,18 @@ async function request(path, method = 'GET', data) {
   } catch {
     payload = null
   }
+  if (response.status === 401) {
+    authToken = ''
+    localStorage.removeItem(authTokenKey)
+    if (currentRoute().name !== 'login') navigate('login', {}, true)
+  }
   if (!response.ok) throw new Error(payload?.data?.message || `请求失败（${response.status}）`)
   return payload?.data
+}
+
+function saveSession(session) {
+  authToken = session.token
+  localStorage.setItem(authTokenKey, session.token)
 }
 
 function resolveImage(source = '') {
@@ -133,7 +152,7 @@ function goBack() {
 }
 
 function currentRoute() {
-  const value = location.hash.replace(/^#\/?/, '') || 'mall'
+  const value = location.hash.replace(/^#\/?/, '') || 'login'
   const [name, query = ''] = value.split('?')
   return { name: routes[name] ? name : 'mall', params: Object.fromEntries(new URLSearchParams(query)) }
 }
@@ -241,7 +260,7 @@ function bindBack(root = app) {
 
 function emptyState(title, description, classPrefix) {
   return `<view class="${classPrefix}-empty-state">
-    <view class="${classPrefix}-empty-illustration">${icon('EyeOff')}</view>
+    <view class="${classPrefix}-empty-illustration">${classPrefix === 'package' ? '<img class="package-empty-image" src="/assets/package-empty.png" alt="" />' : classPrefix === 'exchange' ? '<img class="exchange-empty-image" src="/assets/exchange-empty.png" alt="" />' : icon('EyeOff')}</view>
     <text class="${classPrefix}-empty-title">${title}</text>
     <text class="${classPrefix}-empty-description">${description}</text>
   </view>`
@@ -295,6 +314,14 @@ async function route() {
   cleanupPage()
   cleanupPage = () => {}
   const { name, params } = currentRoute()
+  if (name === 'login' && authToken) {
+    navigate('mall', {}, true)
+    return
+  }
+  if (name !== 'login' && !authToken) {
+    navigate('login', {}, true)
+    return
+  }
   const target = routes[name]
   setActiveBottomTab(name)
   const styleLink = await setPageStyle(target.style, version)
@@ -312,12 +339,69 @@ async function route() {
   activateIcons()
 }
 
+function renderLogin() {
+  const state = { phone: '', code: '', agreed: false, countdown: 0, loggingIn: false }
+  let countdownTimer = 0
+
+  function render() {
+    app.innerHTML = `<view class="login-page"><view class="login-content"><view class="login-brand"><img class="login-logo" src="/assets/app-icon.png" alt="乐伴伴商家严选"/><text class="login-brand-name">乐伴伴商家严选</text><text class="login-brand-tagline">精选好货，快乐相伴</text></view><view class="login-form"><label class="login-field"><view class="login-field-icon">${icon('Smartphone')}</view><input class="login-input" data-login-phone type="tel" inputmode="numeric" maxlength="11" value="${attr(state.phone)}" placeholder="请输入手机号码" aria-label="手机号码"/></label><label class="login-field login-code-field"><view class="login-field-icon">${icon('Mail')}</view><input class="login-input" data-login-code inputmode="numeric" maxlength="6" value="${attr(state.code)}" placeholder="请输入验证码" aria-label="验证码"/><button class="login-code-button" data-send-code ${state.countdown || state.loggingIn ? 'disabled' : ''}>${state.countdown ? `${state.countdown}s后重试` : '获取验证码'}</button></label><button class="login-submit" type="button" data-login ${state.loggingIn ? 'disabled' : ''}><text>${state.loggingIn ? '登录中...' : '登录'}</text></button><label class="login-agreement"><input class="login-agreement-check" type="checkbox" data-agreement ${state.agreed ? 'checked' : ''}/><text>我已阅读并同意</text><text class="login-policy">《用户协议》</text><text>和</text><text class="login-policy">《隐私政策》</text></label></view></view></view>`
+    app.querySelector('[data-login-phone]')?.addEventListener('input', (event) => { state.phone = event.currentTarget.value.replace(/\D/g, '') })
+    app.querySelector('[data-login-code]')?.addEventListener('input', (event) => { state.code = event.currentTarget.value.replace(/\D/g, '') })
+    app.querySelector('[data-agreement]')?.addEventListener('change', (event) => { state.agreed = event.currentTarget.checked })
+    app.querySelector('[data-send-code]')?.addEventListener('click', sendCode)
+    app.querySelector('[data-login]')?.addEventListener('click', login)
+    activateIcons()
+  }
+
+  function validPhone() {
+    return /^1[3-9]\d{9}$/.test(state.phone)
+  }
+
+  function sendCode() {
+    if (!validPhone()) return showToast('请输入正确的手机号')
+    state.countdown = 60
+    showToast('验证码已发送')
+    render()
+    countdownTimer = window.setInterval(() => {
+      state.countdown -= 1
+      if (state.countdown <= 0) {
+        window.clearInterval(countdownTimer)
+        countdownTimer = 0
+      }
+      render()
+    }, 1000)
+  }
+
+  async function login() {
+    if (!validPhone()) return showToast('请输入正确的手机号')
+    if (!/^\d{4,6}$/.test(state.code)) return showToast('请输入4至6位验证码')
+    if (!state.agreed) return showToast('请先阅读并同意用户协议和隐私政策')
+    if (state.loggingIn) return
+    state.loggingIn = true
+    render()
+    try {
+      const session = await request('/auth/phone/login', 'POST', { phone: state.phone, code: state.code })
+      saveSession(session)
+      showToast('登录成功')
+      navigate('mall', {}, true)
+    } catch (error) {
+      state.loggingIn = false
+      render()
+      showToast(errorMessage(error, '登录失败'))
+    }
+  }
+
+  render()
+  return () => window.clearInterval(countdownTimer)
+}
+
 async function renderMall() {
   const state = {
     tab: sessionStorage.getItem('mallActiveTab') || 'merchants',
     merchants: [], packages: [], activeMerchant: 0, packagePage: 1, packageHasMore: false, packageLoading: false,
     categories: [], allExchangeItems: [], activeCategory: 0, exchangePage: 1, exchangeHasMore: false, exchangeLoading: false,
     affordableOnly: false, points: '--', selected: null, shipping: null, dialog: '', redeeming: false,
+    appVoucherRedemptionId: '', appVoucherPhone: '', claimingAppVoucher: false,
   }
   sessionStorage.removeItem('mallActiveTab')
 
@@ -353,6 +437,7 @@ async function renderMall() {
   }
 
   function refresh() {
+    const merchantScrollTop = app.querySelector('.category-list')?.scrollTop || 0
     const packages = state.packages.length ? state.packages.map((item, index) => `
       <view class="package-card ${attr(item.tone)} package-enter" style="animation-delay:${index * 75}ms" data-package="${attr(item.id)}">
         ${item.coverImage ? `<img class="package-cover" src="${attr(resolveImage(item.coverImage))}" alt="" />` : ''}
@@ -363,19 +448,21 @@ async function renderMall() {
 
     const items = exchangeItems()
     const exchange = items.length ? items.map((item, index) => `
-      <view class="exchange-card" data-exchange="${index}">
-        <view class="exchange-icon"><text>${escapeHTML(item.emoji)}</text></view>
+      <view class="exchange-card exchange-enter" style="animation-delay:${index * 75}ms" data-exchange="${index}">
+        <view class="exchange-icon">${item.image ? `<img class="exchange-image" src="${attr(resolveImage(item.image))}" alt="${escapeHTML(item.title)}" />` : `<view class="exchange-image-placeholder">${icon('ImageOff')}</view>`}</view>
         <view class="exchange-copy"><view class="exchange-title-scroll"><text class="exchange-title">${escapeHTML(item.title)}</text></view><view class="exchange-value-row"><text class="exchange-value">价值${escapeHTML(item.value)}元</text><text class="exchange-method">${escapeHTML(item.redemptionMethod)}</text></view><view class="exchange-action"><view class="exchange-points"><text>${escapeHTML(item.points)}</text><text class="exchange-unit">积分</text></view><button class="redeem-button" data-exchange="${index}"><text>兑换</text></button></view></view>
       </view>`).join('') : emptyState('暂无可兑换物品', '继续攒积分再来看看', 'exchange')
 
     app.innerHTML = `<view class="mall-page">
-      <view class="mall-tabs top-tabs" style="--tab-count:2"><button class="top-tab ${state.tab === 'merchants' ? 'active' : ''}" data-mall-tab="merchants">严选商家</button><button class="top-tab ${state.tab === 'exchange' ? 'active' : ''}" data-mall-tab="exchange">积分兑换</button></view>
+      <view class="mall-tabs standard-tabs top-tabs" style="--tab-count:2"><button class="top-tab ${state.tab === 'merchants' ? 'active' : ''}" data-mall-tab="merchants">严选商家</button><button class="top-tab ${state.tab === 'exchange' ? 'active' : ''}" data-mall-tab="exchange">积分兑换</button></view>
       ${state.tab === 'merchants' ? `<view class="shop-body">
-        <scroll-view class="category-list">${state.merchants.map((item, index) => `<view class="category-card ${state.activeMerchant === index ? 'active' : ''}" data-merchant="${index}"><text class="category-name">${escapeHTML(item.name)}</text><text class="category-pinyin">距你 ${escapeHTML(item.distance)}km</text></view>`).join('')}</scroll-view>
+        <view class="category-list-area"><scroll-view class="category-list">${state.merchants.map((item, index) => { const marquee = item.name.length > 5; const duration = Math.max(6, item.name.length * 0.65).toFixed(1); const title = marquee ? `<view class="category-name-scroll"><view class="category-name-marquee" style="animation-duration:${duration}s"><text class="category-name-marquee-text">${escapeHTML(item.name)}</text><text class="category-name-marquee-text">${escapeHTML(item.name)}</text></view></view>` : `<text class="category-name">${escapeHTML(item.name)}</text>`; return `<view class="category-card ${state.activeMerchant === index ? 'active' : ''}" data-merchant="${index}">${title}<text class="category-pinyin">${escapeHTML(item.subtitle || '')}</text></view>` }).join('')}</scroll-view>${state.merchants.length ? '<view class="category-list-fade category-list-fade-top"></view><view class="category-list-fade category-list-fade-bottom"></view>' : ''}</view>
         <view class="package-list-area"><scroll-view class="package-list"><view class="list-refresher" style="opacity:0;transform:translateY(-36px) scale(0)"><view class="list-refresh-dot"></view><view class="list-refresh-dot"></view><view class="list-refresh-dot"></view><text class="list-refresh-label">正在刷新</text></view>${packages}${state.packageLoading ? '<view class="list-load-status">加载中...</view>' : state.packages.length && !state.packageHasMore ? '<view class="list-load-status">没有更多套餐了</view>' : ''}</scroll-view>${state.packages.length ? '<view class="package-list-fade package-list-fade-top"></view><view class="package-list-fade package-list-fade-bottom"></view>' : ''}</view>
       </view>` : `<view class="exchange-section"><view class="exchange-toolbar"><label class="affordable-filter"><input class="affordable-filter-switch web-switch" type="checkbox" ${state.affordableOnly ? 'checked' : ''}/><text class="affordable-filter-label">仅看可兑换</text></label><view class="exchange-summary">我的积分：<text class="exchange-summary-value">${escapeHTML(state.points)}</text></view></view><view class="exchange-body"><scroll-view class="exchange-category-list">${state.categories.map((item, index) => `<view class="exchange-category-card ${state.activeCategory === index ? 'active' : ''}" data-category="${index}"><text class="exchange-category-emoji">${escapeHTML(item.emoji)}</text><text class="exchange-category-name">${escapeHTML(item.label)}</text></view>`).join('')}</scroll-view><scroll-view class="exchange-list"><view class="list-refresher" style="opacity:0;transform:translateY(-36px) scale(0)"><view class="list-refresh-dot"></view><view class="list-refresh-dot"></view><view class="list-refresh-dot"></view><text class="list-refresh-label">正在刷新</text></view>${exchange}${state.exchangeLoading ? '<view class="list-load-status">加载中...</view>' : state.allExchangeItems.length && !state.exchangeHasMore ? '<view class="list-load-status">没有更多物品了</view>' : ''}</scroll-view></view></view>`}
       ${dialogHTML()}${bottomTabbar('mall')}
     </view>`
+    const categoryList = app.querySelector('.category-list')
+    if (categoryList) categoryList.scrollTop = merchantScrollTop
     bind()
     activateIcons()
   }
@@ -383,6 +470,7 @@ async function renderMall() {
   function dialogHTML() {
     if (!state.selected || !state.dialog) return ''
     const item = state.selected
+    if (state.dialog === 'app-voucher-phone') return `<view class="exchange-dialog-layer" data-close-dialog><view class="app-voucher-dialog-wrap" data-dialog><button class="app-voucher-close" data-close-app-voucher aria-label="关闭">&times;</button><view class="exchange-dialog app-voucher-dialog"><text class="exchange-dialog-title">使用 App 抵用券</text><text class="app-voucher-warning">*输入错误导致未能领取本平台将不负责。</text><input class="app-voucher-phone-input" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入乐伴伴 App 登录手机号" value="${attr(state.appVoucherPhone)}" /><button class="exchange-dialog-confirm" data-claim-app-voucher>${state.claimingAppVoucher ? '提交中...' : '确认领取'}</button></view></view></view>`
     if (state.dialog === 'shipping') return `<view class="exchange-dialog-layer" data-close-dialog><view class="exchange-dialog shipping-dialog" data-dialog><view class="exchange-dialog-icon"><text>${escapeHTML(item.emoji)}</text></view><text class="exchange-dialog-title">${escapeHTML(item.title)}</text><view class="exchange-dialog-points shipping-points"><text>${escapeHTML(item.points)}</text><text class="exchange-dialog-unit">积分</text></view><view class="exchange-dialog-divider"></view><text class="shipping-title">确认邮寄到以下地址？</text><view class="shipping-address-card"><text class="shipping-contact">${escapeHTML(state.shipping.contactName)} ${escapeHTML(state.shipping.contactPhone)}</text><text class="shipping-address">${escapeHTML(`${state.shipping.region.join(' ')} ${state.shipping.detail}`)}</text></view><view class="shipping-actions"><button class="shipping-edit" data-edit-address>修改地址</button><button class="shipping-confirm" data-confirm-redeem>确认邮寄</button></view></view></view>`
     return `<view class="exchange-dialog-layer" data-close-dialog><view class="exchange-dialog" data-dialog><view class="exchange-dialog-icon"><text>${escapeHTML(item.emoji)}</text></view><text class="exchange-dialog-title">${escapeHTML(item.title)}</text><text class="exchange-dialog-value">价值${escapeHTML(item.value)}元</text><view class="exchange-dialog-points"><text>${escapeHTML(item.points)}</text><text class="exchange-dialog-unit">积分</text></view><view class="exchange-dialog-divider"></view><text class="exchange-dialog-note">兑换后可在我的订单中查看</text><button class="exchange-dialog-confirm" data-confirm-redeem>立即兑换</button></view></view>`
   }
@@ -432,12 +520,40 @@ async function renderMall() {
       const result = await request(`/points/products/${encodeURIComponent(state.selected.id)}/redeem`, 'POST')
       state.points = String(result.points)
       state.dialog = ''
-      state.selected = null
       showToast('兑换成功')
+	  if (result.isAppVoucher && window.confirm('优惠券已到账，是否现在就使用？')) {
+		state.appVoucherRedemptionId = result.id
+		state.appVoucherPhone = ''
+		state.dialog = 'app-voucher-phone'
+	  } else state.selected = null
     } catch (error) {
       showToast(errorMessage(error, '兑换失败'))
     } finally {
       state.redeeming = false
+      refresh()
+    }
+  }
+
+  async function claimAppVoucher() {
+    const phone = state.appVoucherPhone.trim()
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      showToast('请输入正确的手机号')
+      return
+    }
+    if (!state.appVoucherRedemptionId || state.claimingAppVoucher) return
+    state.claimingAppVoucher = true
+    refresh()
+    try {
+      await request(`/points/redemptions/${encodeURIComponent(state.appVoucherRedemptionId)}/app-voucher`, 'POST', { phone })
+      state.dialog = ''
+      state.selected = null
+      state.appVoucherRedemptionId = ''
+      state.appVoucherPhone = ''
+      showToast('领取信息已提交')
+    } catch (error) {
+      showToast(errorMessage(error, '领取失败'))
+    } finally {
+      state.claimingAppVoucher = false
       refresh()
     }
   }
@@ -450,10 +566,13 @@ async function renderMall() {
     app.querySelectorAll('[data-category]').forEach((card) => card.addEventListener('click', async () => { state.activeCategory = Number(card.dataset.category); await loadExchange(); refresh() }))
     app.querySelector('.affordable-filter-switch')?.addEventListener('change', (event) => { state.affordableOnly = event.currentTarget.checked; refresh() })
     app.querySelectorAll('[data-exchange]').forEach((card) => card.addEventListener('click', (event) => { event.stopPropagation(); openExchange(Number(card.dataset.exchange)) }))
-    app.querySelector('[data-close-dialog]')?.addEventListener('click', () => { state.dialog = ''; refresh() })
+    app.querySelector('[data-close-dialog]')?.addEventListener('click', () => { state.dialog = ''; state.selected = null; state.appVoucherRedemptionId = ''; state.appVoucherPhone = ''; refresh() })
+    app.querySelector('[data-close-app-voucher]')?.addEventListener('click', () => { state.dialog = ''; state.selected = null; state.appVoucherRedemptionId = ''; state.appVoucherPhone = ''; refresh() })
     app.querySelector('[data-dialog]')?.addEventListener('click', (event) => event.stopPropagation())
     app.querySelector('[data-edit-address]')?.addEventListener('click', () => navigate('address'))
     app.querySelector('[data-confirm-redeem]')?.addEventListener('click', redeem)
+	app.querySelector('.app-voucher-phone-input')?.addEventListener('input', (event) => { state.appVoucherPhone = event.currentTarget.value })
+	app.querySelector('[data-claim-app-voucher]')?.addEventListener('click', claimAppVoucher)
     const packageList = app.querySelector('.package-list')
     const exchangeList = app.querySelector('.exchange-list')
     const detachPull = attachPullRefresh(packageList || exchangeList, app.querySelector('.list-refresher'), async () => {
@@ -532,7 +651,7 @@ async function renderOrders() {
   function refresh() {
     app.innerHTML = `<view class="orders-page">
       <view class="orders-tabs top-tabs" style="--tab-count:3"><button class="top-tab ${state.status === 'pending' ? 'active' : ''}" data-status="pending">待核销</button><button class="top-tab ${state.status === 'verified' ? 'active' : ''}" data-status="verified">已核销</button><button class="top-tab ${state.status === 'expired' ? 'active' : ''}" data-status="expired">已失效</button></view>
-      <scroll-view class="order-list"><view class="list-refresher" style="opacity:0;transform:translateY(-36px) scale(0)"><view class="list-refresh-dot"></view><view class="list-refresh-dot"></view><view class="list-refresh-dot"></view><text class="list-refresh-label">正在刷新</text></view>${state.orders.map((item, index) => `<view class="order-card order-enter" style="animation-delay:${index * 75}ms" data-order="${attr(item.id)}"><view class="order-main"><text class="order-title">${escapeHTML(item.title)}</text><text class="order-merchant">${escapeHTML(item.merchant)}</text></view><view class="order-meta"><text class="order-price">${escapeHTML(item.priceText)}</text><text class="order-status">${escapeHTML(item.status)}</text></view></view>`).join('')}${state.loading ? '<view class="order-load-status">加载中...</view>' : state.orders.length && !state.hasMore ? '<view class="order-load-status">没有更多订单了</view>' : ''}</scroll-view>${bottomTabbar('orders')}</view>`
+      <scroll-view class="order-list"><view class="list-refresher" style="opacity:0;transform:translateY(-36px) scale(0)"><view class="list-refresh-dot"></view><view class="list-refresh-dot"></view><view class="list-refresh-dot"></view><text class="list-refresh-label">正在刷新</text></view>${state.orders.map((item, index) => `<view class="order-card ${item.state === 'expired' ? 'is-expired' : ''} order-enter" style="animation-delay:${index * 75}ms" data-order="${attr(item.id)}"><view class="order-content"><view class="order-cover-wrap">${item.image ? `<img class="order-cover" src="${attr(resolveImage(item.image))}" alt="${attr(item.title)}"/>` : `<view class="order-cover-placeholder">${icon('ImageOff')}</view>`}${item.state === 'expired' && item.image ? '<view class="order-cover-mask"></view>' : ''}</view><view class="order-main"><text class="order-title">${escapeHTML(item.title)}</text><text class="order-merchant">${escapeHTML(item.merchant)}</text></view></view><view class="order-meta"><text class="order-price">${escapeHTML(item.priceText)}</text></view></view>`).join('')}${state.loading ? '<view class="order-load-status">加载中...</view>' : state.orders.length && !state.hasMore ? '<view class="order-load-status">没有更多订单了</view>' : ''}</scroll-view>${bottomTabbar('orders')}</view>`
     bindBottomTabs()
     app.querySelectorAll('[data-status]').forEach((button) => button.addEventListener('click', async () => { state.status = button.dataset.status; await load(); refresh() }))
     app.querySelectorAll('[data-order]').forEach((card) => card.addEventListener('click', () => navigate('order', { id: card.dataset.order })))
@@ -611,12 +730,13 @@ async function renderBenefits() {
     const gamesMarkup = `<view class="benefit-games">${state.games.slice(0, 3).map((game) => `<button class="benefit-game-item" data-game-title="${attr(game.title)}" data-game-link="${attr(game.link)}">${game.image ? `<img class="benefit-game-image" src="${attr(resolveImage(game.image))}" alt="${attr(game.title)}"/>` : '<view class="benefit-game-fallback"></view>'}</button>`).join('')}<button class="benefit-game-item benefit-more-games" data-more-games><img class="benefit-game-image" src="/assets/more-games.png" alt="更多游戏"/></button></view>`
     const dialog = state.dialog && state.enterpriseDialog ? `<view class="enterprise-dialog-layer" data-close-enterprise><view class="enterprise-dialog" data-enterprise-dialog><view class="enterprise-dialog-header"><text class="enterprise-dialog-title">${escapeHTML(state.enterpriseDialog.title)}</text><button class="enterprise-dialog-close" data-close-enterprise>×</button></view><view class="enterprise-dialog-content"><img class="enterprise-qr-image" src="${attr(resolveImage(state.enterpriseDialog.image))}" alt="企业微信二维码"/><text class="enterprise-dialog-primary">${escapeHTML(state.enterpriseDialog.primary)}</text><text class="enterprise-dialog-secondary">${escapeHTML(state.enterpriseDialog.secondary)}</text></view></view></view>` : ''
     app.innerHTML = `<view class="benefits-page">
+      <img class="benefit-game-hero" src="/assets/game-points-hero.png" alt="游戏赚积分"/>
+      ${gamesMarkup}
       <view class="benefit-points-card"><text class="benefit-points-label">我的积分</text><view class="benefit-points-value"><text class="benefit-points-number">${escapeHTML(state.points)}</text></view></view>
       <view class="benefit-leaderboard"><view class="leaderboard-header"><text class="leaderboard-title">积分排行榜</text><text class="leaderboard-subtitle">TOP 5</text></view>${state.leaderboard.map((item) => item.isEllipsis ? '<view class="leaderboard-ellipsis"><text>•••</text></view>' : `<view class="leaderboard-item ${item.isCurrent ? 'is-current' : ''}"><view class="leaderboard-rank rank-${item.rank}"><text>${escapeHTML(item.rank)}</text></view><view class="leaderboard-avatar"><text>${escapeHTML(item.initial)}</text></view><text class="leaderboard-name">${escapeHTML(item.nickname)}</text><text class="leaderboard-points">${escapeHTML(item.points)}</text></view>`).join('')}</view>
       <view class="benefit-grid">${state.items.map((item) => `<view class="benefit-grid-item" data-benefit="${attr(item.action)}"><view class="benefit-emoji">${escapeHTML(item.emoji)}</view><text class="benefit-label">${escapeHTML(item.label)}</text></view>`).join('')}</view>
       <view class="benefit-notice"><text class="benefit-notice-icon">🔊</text><view class="benefit-notice-swiper"><view class="benefit-notice-item"><text class="benefit-notice-text">${escapeHTML(state.notices[state.noticeIndex] || '')}</text></view></view><text class="benefit-notice-arrow">›</text></view>
       <view class="benefit-promos">${state.promos.map((promo) => `<view class="benefit-promo" data-benefit="${attr(promo.action)}"><img class="benefit-promo-image" src="${attr(resolveImage(promo.image))}" alt=""/></view>`).join('')}</view>${dialog}${bottomTabbar('benefits')}</view>`
-    app.querySelector('.benefit-grid')?.insertAdjacentHTML('afterend', gamesMarkup)
     bindBottomTabs()
     app.querySelectorAll('[data-benefit]').forEach((item) => item.addEventListener('click', () => openBenefit(item.dataset.benefit)))
     app.querySelectorAll('[data-game-link]').forEach((item) => item.addEventListener('click', () => openGameLink(item.dataset.gameTitle, item.dataset.gameLink)))
@@ -719,7 +839,7 @@ async function renderMine() {
   app.innerHTML = `<view class="mine-page">
     <view class="profile"><view class="avatar">${icon('UserRound')}</view><view class="profile-text"><text class="nickname">${escapeHTML(summary?.profile?.nickname || '乐伴伴会员')}</text><text class="profile-subtitle">精选酒吧套餐与专属服务</text></view><view class="verification-action"><button class="verification-button" data-verify>${icon('ScanLine')}<text>我要核销</text></button></view></view>
     <view class="stats">${(summary?.stats || []).map((item, index) => `<view class="stat-item" data-stat="${index}"><text class="stat-value">${escapeHTML(item.value)}</text><text class="stat-label">${escapeHTML(item.label)}</text></view>`).join('')}</view>
-    <view class="entry-list"><view class="entry-item" data-entry="address"><view class="entry-icon">${icon('MapPin')}</view><text class="entry-label">地址设置</text>${address ? `<text class="entry-summary">${escapeHTML(address.region.join(' '))}</text>` : ''}${icon('ChevronRight')}</view><view class="entry-item" data-entry="orders"><view class="entry-icon">${icon('ClipboardList')}</view><text class="entry-label">我的订单</text>${icon('ChevronRight')}</view></view>${bottomTabbar('mine')}</view>`
+    <view class="entry-list"><view class="entry-item" data-entry="address"><view class="entry-icon">${icon('MapPin')}</view><text class="entry-label">地址设置</text><text class="entry-summary">${address ? '已设置' : '未设置'}</text>${icon('ChevronRight')}</view><view class="entry-item" data-entry="orders"><view class="entry-icon">${icon('ClipboardList')}</view><text class="entry-label">我的订单</text>${icon('ChevronRight')}</view></view>${bottomTabbar('mine')}</view>`
   bindBottomTabs()
   app.querySelectorAll('[data-stat]').forEach((item) => item.addEventListener('click', () => {
     const index = Number(item.dataset.stat)
@@ -816,7 +936,10 @@ async function renderAddress() {
   function refreshPickerColumns() {
     const columns = app.querySelector('.area-picker-columns')
     if (!columns) return
+    const provinceScrollTop = columns.querySelector('.area-picker-column')?.scrollTop || 0
     columns.innerHTML = pickerColumnsHTML()
+    const provinceColumn = columns.querySelector('.area-picker-column')
+    if (provinceColumn) provinceColumn.scrollTop = provinceScrollTop
     bindPickerOptions(columns)
   }
 
@@ -870,15 +993,22 @@ async function renderPoints() {
 }
 
 async function renderCoupons() {
-  const state = { status: 'available', coupons: [] }
+  const state = { status: 'available', coupons: [], selected: null, phone: '', claiming: false }
   async function load() {
     try { state.coupons = await request(`/coupons?status=${state.status}`) || [] }
     catch (error) { showToast(errorMessage(error, '加载优惠券失败')) }
   }
   function refresh() {
-    app.innerHTML = `<view class="coupons-page"><view class="page-header">${backButton('back-button')}<text class="page-title">优惠券</text></view><view class="coupon-tabs top-tabs" style="--tab-count:3"><button class="top-tab ${state.status === 'available' ? 'active' : ''}" data-status="available">待使用</button><button class="top-tab ${state.status === 'used' ? 'active' : ''}" data-status="used">已使用</button><button class="top-tab ${state.status === 'expired' ? 'active' : ''}" data-status="expired">已过期</button></view><view class="coupon-list">${state.coupons.map((item) => `<view class="coupon-card ${attr(item.state)}"><view class="coupon-value"><text class="coupon-currency">¥</text><text>${escapeHTML(item.value)}</text></view><view class="coupon-copy"><text class="coupon-title">${escapeHTML(item.title)}</text><text class="coupon-note">${escapeHTML(item.note)}</text><text class="coupon-date">${escapeHTML(item.date)}</text></view><text class="coupon-state">${escapeHTML(item.status)}</text></view>`).join('')}</view></view>`
+    const dialog = state.selected ? `<view class="coupon-dialog-layer" data-close-coupon-dialog><view class="coupon-dialog-wrap" data-coupon-dialog><button class="coupon-dialog-close" data-close-coupon-icon aria-label="关闭">&times;</button><view class="coupon-dialog"><text class="coupon-dialog-title">使用 App 抵用券</text><text class="coupon-dialog-warning">*输入错误导致未能领取本平台将不负责。</text><input class="coupon-phone-input" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入乐伴伴 App 登录手机号" value="${attr(state.phone)}" /><button class="coupon-dialog-confirm" data-claim-coupon>${state.claiming ? '提交中...' : '确认领取'}</button></view></view></view>` : ''
+    app.innerHTML = `<view class="coupons-page"><view class="page-header">${backButton('back-button')}<text class="page-title">优惠券</text></view><view class="coupon-tabs standard-tabs top-tabs" style="--tab-count:3"><button class="top-tab ${state.status === 'available' ? 'active' : ''}" data-status="available">待使用</button><button class="top-tab ${state.status === 'used' ? 'active' : ''}" data-status="used">已使用</button><button class="top-tab ${state.status === 'expired' ? 'active' : ''}" data-status="expired">已过期</button></view><view class="coupon-list">${state.coupons.map((item, index) => `<view class="coupon-card ${attr(item.state)} ${item.isAppVoucher ? 'is-app-voucher' : ''}" ${item.isAppVoucher ? `data-app-voucher-index="${index}"` : ''}><view class="coupon-value"><text class="coupon-currency">¥</text><text>${escapeHTML(item.value)}</text></view><view class="coupon-copy"><text class="coupon-title">${escapeHTML(item.title)}</text><text class="coupon-note">${escapeHTML(item.note)}</text><text class="coupon-date">${escapeHTML(item.date)}</text></view><text class="coupon-state">${escapeHTML(item.status)}</text></view>`).join('')}</view>${dialog}</view>`
     bindBack()
     app.querySelectorAll('[data-status]').forEach((button) => button.addEventListener('click', async () => { state.status = button.dataset.status; await load(); refresh() }))
+    app.querySelectorAll('[data-app-voucher-index]').forEach((card) => card.addEventListener('click', () => { const coupon = state.coupons[Number(card.dataset.appVoucherIndex)]; if (!coupon || coupon.appVoucherClaimed) return showToast(coupon?.appVoucherClaimed ? '领取信息已提交' : '该优惠券暂不可使用'); state.selected = coupon; state.phone = ''; refresh() }))
+    app.querySelector('[data-close-coupon-dialog]')?.addEventListener('click', () => { state.selected = null; state.phone = ''; refresh() })
+    app.querySelector('[data-close-coupon-icon]')?.addEventListener('click', () => { state.selected = null; state.phone = ''; refresh() })
+    app.querySelector('[data-coupon-dialog]')?.addEventListener('click', (event) => event.stopPropagation())
+    app.querySelector('.coupon-phone-input')?.addEventListener('input', (event) => { state.phone = event.currentTarget.value })
+    app.querySelector('[data-claim-coupon]')?.addEventListener('click', async () => { const phone = state.phone.trim(); if (!/^1[3-9]\d{9}$/.test(phone)) return showToast('请输入正确的手机号'); if (!state.selected?.redemptionId || state.claiming) return; state.claiming = true; refresh(); try { await request(`/points/redemptions/${encodeURIComponent(state.selected.redemptionId)}/app-voucher`, 'POST', { phone }); state.selected = null; state.phone = ''; await load(); showToast('领取信息已提交') } catch (error) { showToast(errorMessage(error, '领取失败')) } finally { state.claiming = false; refresh() } })
     activateIcons()
   }
   await load()

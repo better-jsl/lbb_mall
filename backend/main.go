@@ -82,30 +82,36 @@ func main() {
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", a.health)
+	mux.HandleFunc("POST /api/v1/auth/wechat/login", a.wechatLogin)
+	mux.HandleFunc("POST /api/v1/auth/phone/login", a.phoneLogin)
+	mux.HandleFunc("POST /api/v1/auth/wechat/avatar", a.requireAuth(a.uploadWechatAvatar))
+	mux.HandleFunc("POST /api/v1/me/phone", a.requireAuth(a.authorizeWechatPhone))
+	mux.HandleFunc("PUT /api/v1/me/profile", a.requireAuth(a.updateWechatProfile))
 	mux.HandleFunc("GET /api/v1/merchants", a.merchants)
 	mux.HandleFunc("GET /api/v1/merchants/{id}/packages", a.merchantPackages)
 	mux.HandleFunc("GET /api/v1/packages/{id}", a.packageDetail)
-	mux.HandleFunc("GET /api/v1/orders", a.orders)
-	mux.HandleFunc("GET /api/v1/orders/{id}", a.orderDetail)
-	mux.HandleFunc("POST /api/v1/orders", a.createOrder)
-	mux.HandleFunc("POST /api/v1/orders/verify", a.verifyOrder)
-	mux.HandleFunc("GET /api/v1/me/summary", a.summary)
-	mux.HandleFunc("GET /api/v1/me/daily-check-in", a.dailyCheckInStatus)
-	mux.HandleFunc("POST /api/v1/me/daily-check-in", a.dailyCheckIn)
-	mux.HandleFunc("GET /api/v1/me/address", a.address)
-	mux.HandleFunc("PUT /api/v1/me/address", a.saveAddress)
-	mux.HandleFunc("GET /api/v1/points/leaderboard", a.pointsLeaderboard)
-	mux.HandleFunc("GET /api/v1/points/records", a.pointRecords)
+	mux.HandleFunc("GET /api/v1/orders", a.requireAuth(a.orders))
+	mux.HandleFunc("GET /api/v1/orders/{id}", a.requireAuth(a.orderDetail))
+	mux.HandleFunc("POST /api/v1/orders", a.requireAuth(a.createOrder))
+	mux.HandleFunc("POST /api/v1/orders/verify", a.requireAuth(a.verifyOrder))
+	mux.HandleFunc("GET /api/v1/me/summary", a.requireAuth(a.summary))
+	mux.HandleFunc("GET /api/v1/me/daily-check-in", a.requireAuth(a.dailyCheckInStatus))
+	mux.HandleFunc("POST /api/v1/me/daily-check-in", a.requireAuth(a.dailyCheckIn))
+	mux.HandleFunc("GET /api/v1/me/address", a.requireAuth(a.address))
+	mux.HandleFunc("PUT /api/v1/me/address", a.requireAuth(a.saveAddress))
+	mux.HandleFunc("GET /api/v1/points/leaderboard", a.requireAuth(a.pointsLeaderboard))
+	mux.HandleFunc("GET /api/v1/points/records", a.requireAuth(a.pointRecords))
 	mux.HandleFunc("GET /api/v1/points/categories", a.pointsCategories)
 	mux.HandleFunc("GET /api/v1/points/products", a.pointsProducts)
-	mux.HandleFunc("POST /api/v1/points/products/{id}/redeem", a.redeemPointsProduct)
-	mux.HandleFunc("GET /api/v1/points/redemptions", a.pointsRedemptions)
+	mux.HandleFunc("POST /api/v1/points/products/{id}/redeem", a.requireAuth(a.redeemPointsProduct))
+	mux.HandleFunc("POST /api/v1/points/redemptions/{id}/app-voucher", a.requireAuth(a.claimAppVoucher))
+	mux.HandleFunc("GET /api/v1/points/redemptions", a.requireAuth(a.pointsRedemptions))
 	mux.HandleFunc("GET /api/v1/benefits", a.benefits)
-	mux.HandleFunc("GET /api/v1/daily-tasks", a.dailyTasks)
-	mux.HandleFunc("POST /api/v1/daily-tasks/{id}/complete", a.completeDailyTask)
-	mux.HandleFunc("GET /api/v1/games", a.games)
-	mux.HandleFunc("POST /api/v1/games/{id}/play", a.playGame)
-	mux.HandleFunc("GET /api/v1/coupons", a.coupons)
+	mux.HandleFunc("GET /api/v1/daily-tasks", a.requireAuth(a.dailyTasks))
+	mux.HandleFunc("POST /api/v1/daily-tasks/{id}/complete", a.requireAuth(a.completeDailyTask))
+	mux.HandleFunc("GET /api/v1/games", a.requireAuth(a.games))
+	mux.HandleFunc("POST /api/v1/games/{id}/play", a.requireAuth(a.playGame))
+	mux.HandleFunc("GET /api/v1/coupons", a.requireAuth(a.coupons))
 	mux.HandleFunc("GET /api/v1/admin/merchants", a.adminMerchants)
 	mux.HandleFunc("POST /api/v1/admin/merchants", a.createAdminMerchant)
 	mux.HandleFunc("PATCH /api/v1/admin/merchants/reorder", a.reorderAdminMerchants)
@@ -138,7 +144,7 @@ func (a *app) health(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (a *app) merchants(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(r.Context(), `SELECT id, name, pinyin, distance_km FROM merchants ORDER BY sort_order`)
+	rows, err := a.db.QueryContext(r.Context(), `SELECT id, name, pinyin, COALESCE(subtitle, '') FROM merchants ORDER BY sort_order`)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -146,13 +152,12 @@ func (a *app) merchants(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	out := []map[string]any{}
 	for rows.Next() {
-		var id, name, pinyin string
-		var distance float64
-		if err := rows.Scan(&id, &name, &pinyin, &distance); err != nil {
+		var id, name, pinyin, subtitle string
+		if err := rows.Scan(&id, &name, &pinyin, &subtitle); err != nil {
 			serverError(w, err)
 			return
 		}
-		out = append(out, map[string]any{"id": id, "name": name, "pinyin": pinyin, "distance": fmt.Sprintf("%.1f", distance)})
+		out = append(out, map[string]any{"id": id, "name": name, "pinyin": pinyin, "subtitle": subtitle})
 	}
 	respond(w, http.StatusOK, out)
 }
@@ -226,7 +231,7 @@ func (a *app) orders(w http.ResponseWriter, r *http.Request) {
 		UNION ALL
 		SELECT pr.id,pp.title,'积分商城' AS merchant,pr.points_cost::text AS price,pr.status,TRUE AS is_redemption,COALESCE(pp.image,'') AS image,pr.created_at FROM points_redemptions pr JOIN points_products pp ON pp.id=pr.product_id WHERE pr.user_id=$1
 	) records WHERE ($2='' OR status=$2) ORDER BY created_at DESC`
-	args := []any{currentUserID, state}
+	args := []any{requestUserID(r), state}
 	if page.enabled {
 		query += ` LIMIT $3 OFFSET $4`
 		args = append(args, page.limit+1, page.offset)
@@ -261,7 +266,7 @@ func (a *app) orders(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) orderDetail(w http.ResponseWriter, r *http.Request) {
 	var id, title, merchant, price, status, orderNo, contentsRaw, createdAt string
-	err := a.db.QueryRowContext(r.Context(), `SELECT o.id,p.title,m.name,p.price::text,o.status,o.order_no,p.contents,o.created_at::text FROM orders o JOIN packages p ON p.id=o.package_id JOIN merchants m ON m.id=p.merchant_id WHERE o.id=$1 AND o.user_id=$2`, r.PathValue("id"), currentUserID).Scan(&id, &title, &merchant, &price, &status, &orderNo, &contentsRaw, &createdAt)
+	err := a.db.QueryRowContext(r.Context(), `SELECT o.id,p.title,m.name,p.price::text,o.status,o.order_no,p.contents,o.created_at::text FROM orders o JOIN packages p ON p.id=o.package_id JOIN merchants m ON m.id=p.merchant_id WHERE o.id=$1 AND o.user_id=$2`, r.PathValue("id"), requestUserID(r)).Scan(&id, &title, &merchant, &price, &status, &orderNo, &contentsRaw, &createdAt)
 	if err == sql.ErrNoRows {
 		a.pointsRedemptionOrderDetail(w, r)
 		return
@@ -289,7 +294,7 @@ func (a *app) createOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	id := fmt.Sprintf("order-%d", time.Now().UnixNano())
 	orderNo := fmt.Sprintf("LBB%d", time.Now().Unix())
-	if _, err := a.db.ExecContext(r.Context(), `INSERT INTO orders(id,package_id,user_id,order_no,status) VALUES($1,$2,$3,$4,'pending')`, id, body.PackageID, currentUserID, orderNo); err != nil {
+	if _, err := a.db.ExecContext(r.Context(), `INSERT INTO orders(id,package_id,user_id,order_no,status) VALUES($1,$2,$3,$4,'pending')`, id, body.PackageID, requestUserID(r), orderNo); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -303,7 +308,7 @@ func (a *app) verifyOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	var id string
-	err := a.db.QueryRowContext(r.Context(), `SELECT id FROM orders WHERE status='pending' AND user_id=$2 AND ($1 = '' OR id = $1) ORDER BY created_at LIMIT 1`, body.OrderID, currentUserID).Scan(&id)
+	err := a.db.QueryRowContext(r.Context(), `SELECT id FROM orders WHERE status='pending' AND user_id=$2 AND ($1 = '' OR id = $1) ORDER BY created_at LIMIT 1`, body.OrderID, requestUserID(r)).Scan(&id)
 	if err == sql.ErrNoRows {
 		respond(w, http.StatusNotFound, map[string]string{"message": "no pending order"})
 		return
@@ -322,7 +327,7 @@ func (a *app) verifyOrder(w http.ResponseWriter, r *http.Request) {
 func (a *app) summary(w http.ResponseWriter, r *http.Request) {
 	var nickname, avatar, phone string
 	var points, coupons, favorites int
-	err := a.db.QueryRowContext(r.Context(), `SELECT nickname,avatar,phone,points,coupons,favorites FROM profile WHERE id=$1`, currentUserID).Scan(&nickname, &avatar, &phone, &points, &coupons, &favorites)
+	err := a.db.QueryRowContext(r.Context(), `SELECT nickname,avatar,phone,points,coupons,favorites FROM profile WHERE id=$1`, requestUserID(r)).Scan(&nickname, &avatar, &phone, &points, &coupons, &favorites)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -336,7 +341,7 @@ func (a *app) dailyCheckInStatus(w http.ResponseWriter, r *http.Request) {
 	err := a.db.QueryRowContext(r.Context(), `
 		SELECT EXISTS(SELECT 1 FROM daily_check_ins WHERE user_id = $1 AND check_in_date = CURRENT_DATE), points
 		FROM profile
-		WHERE id = $1`, "demo-user").Scan(&checkedIn, &points)
+		WHERE id = $1`, requestUserID(r)).Scan(&checkedIn, &points)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -346,7 +351,7 @@ func (a *app) dailyCheckInStatus(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) dailyCheckIn(w http.ResponseWriter, r *http.Request) {
 	const reward = 10
-	const userID = "demo-user"
+	userID := requestUserID(r)
 
 	tx, err := a.db.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -404,7 +409,7 @@ func (a *app) address(w http.ResponseWriter, r *http.Request) {
 	err := a.db.QueryRowContext(r.Context(), `
 		SELECT province, city, district, detail, contact_name, contact_phone
 		FROM user_addresses
-		WHERE user_id = $1`, "demo-user").Scan(
+		WHERE user_id = $1`, requestUserID(r)).Scan(
 		&province, &city, &district, &address.Detail, &address.ContactName, &address.ContactPhone,
 	)
 	if err == sql.ErrNoRows {
@@ -447,7 +452,7 @@ func (a *app) saveAddress(w http.ResponseWriter, r *http.Request) {
 			contact_name = EXCLUDED.contact_name,
 			contact_phone = EXCLUDED.contact_phone,
 			updated_at = NOW()`,
-		"address-demo-user", "demo-user", input.Region[0], input.Region[1], input.Region[2], input.Detail, input.ContactName, input.ContactPhone)
+		"address-"+requestUserID(r), requestUserID(r), input.Region[0], input.Region[1], input.Region[2], input.Detail, input.ContactName, input.ContactPhone)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -465,7 +470,7 @@ func (a *app) pointsLeaderboard(w http.ResponseWriter, r *http.Request) {
 		SELECT id, nickname, points, rank
 		FROM ranked
 		WHERE rank <= 5 OR id = $1
-		ORDER BY rank`, currentUserID)
+		ORDER BY rank`, requestUserID(r))
 	if err != nil {
 		serverError(w, err)
 		return
@@ -480,13 +485,13 @@ func (a *app) pointsLeaderboard(w http.ResponseWriter, r *http.Request) {
 			serverError(w, err)
 			return
 		}
-		items = append(items, map[string]any{"rank": rank, "nickname": nickname, "initial": string([]rune(nickname)[0]), "points": points, "isCurrent": id == currentUserID})
+		items = append(items, map[string]any{"rank": rank, "nickname": nickname, "initial": string([]rune(nickname)[0]), "points": points, "isCurrent": id == requestUserID(r)})
 	}
 	respond(w, http.StatusOK, items)
 }
 
 func (a *app) pointRecords(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(r.Context(), `SELECT id,title,occurred_at::text,change FROM point_records WHERE user_id=$1 ORDER BY occurred_at DESC`, currentUserID)
+	rows, err := a.db.QueryContext(r.Context(), `SELECT id,title,occurred_at::text,change FROM point_records WHERE user_id=$1 ORDER BY occurred_at DESC`, requestUserID(r))
 	if err != nil {
 		serverError(w, err)
 		return
@@ -507,7 +512,7 @@ func (a *app) pointRecords(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) coupons(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("status")
-	rows, err := a.db.QueryContext(r.Context(), `SELECT id,value::text,title,note,date_text,status,state FROM coupons WHERE user_id=$1 AND ($2='' OR state=$2) ORDER BY sort_order`, currentUserID, state)
+	rows, err := a.db.QueryContext(r.Context(), `SELECT c.id,c.value::text,c.title,c.note,c.date_text,c.status,c.state,COALESCE(c.redemption_id,''),COALESCE(pr.app_phone,'') FROM coupons c LEFT JOIN points_redemptions pr ON pr.id=c.redemption_id WHERE c.user_id=$1 AND ($2='' OR c.state=$2) ORDER BY c.sort_order`, requestUserID(r), state)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -515,12 +520,12 @@ func (a *app) coupons(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	out := []map[string]any{}
 	for rows.Next() {
-		var id, value, title, note, date, statusTextValue, stateValue string
-		if err := rows.Scan(&id, &value, &title, &note, &date, &statusTextValue, &stateValue); err != nil {
+		var id, value, title, note, date, statusTextValue, stateValue, redemptionID, appPhone string
+		if err := rows.Scan(&id, &value, &title, &note, &date, &statusTextValue, &stateValue, &redemptionID, &appPhone); err != nil {
 			serverError(w, err)
 			return
 		}
-		out = append(out, map[string]any{"id": id, "value": value, "title": title, "note": note, "date": date, "status": statusTextValue, "state": stateValue})
+		out = append(out, map[string]any{"id": id, "value": value, "title": title, "note": note, "date": date, "status": statusTextValue, "state": stateValue, "isAppVoucher": redemptionID != "", "redemptionId": redemptionID, "appVoucherClaimed": appPhone != ""})
 	}
 	respond(w, http.StatusOK, out)
 }
@@ -607,7 +612,8 @@ func serverError(w http.ResponseWriter, err error) {
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

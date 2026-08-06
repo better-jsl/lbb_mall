@@ -5,13 +5,21 @@ page {
 
 .points-page {
   min-height: 100vh;
-  padding: var(--menu-button-top) 32rpx calc(48rpx + env(safe-area-inset-bottom));
+  padding: calc(var(--menu-button-top) + var(--menu-button-height)) 32rpx calc(48rpx + env(safe-area-inset-bottom));
 }
 
 .page-header {
   display: flex;
   align-items: center;
-  height: var(--menu-button-height);
+  position: fixed;
+  z-index: 10;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: calc(var(--menu-button-top) + var(--menu-button-height));
+  padding: var(--menu-button-top) 32rpx 0;
+  background: #f4f6fb;
+  box-sizing: border-box;
 }
 
 .back-button {

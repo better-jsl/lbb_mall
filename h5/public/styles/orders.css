@@ -7,7 +7,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: calc(var(--menu-button-top) + 4px) calc(32 * 100vw / 750) calc(calc(146 * 100vw / 750) + env(safe-area-inset-bottom));
+  padding: calc(var(--menu-button-top) - 4px) calc(32 * 100vw / 750) calc(calc(146 * 100vw / 750) + env(safe-area-inset-bottom));
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -94,12 +94,53 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: calc(150 * 100vw / 750);
+  min-height: calc(128 * 100vw / 750);
   margin-bottom: calc(20 * 100vw / 750);
-  padding: calc(24 * 100vw / 750) calc(28 * 100vw / 750);
+  padding: calc(18 * 100vw / 750) calc(24 * 100vw / 750);
   border-radius: calc(16 * 100vw / 750);
   background: #ffffff;
   box-shadow: 0 calc(10 * 100vw / 750) calc(28 * 100vw / 750) rgba(24, 39, 67, 0.07);
+}
+
+.order-content {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.order-cover-wrap {
+  position: relative;
+  display: flex;
+  flex: 0 0 calc(92 * 100vw / 750);
+  width: calc(92 * 100vw / 750);
+  height: calc(92 * 100vw / 750);
+  overflow: hidden;
+  border-radius: calc(14 * 100vw / 750);
+}
+
+.order-cover,
+.order-cover-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: #eef2f7;
+}
+
+.order-cover {
+  object-fit: cover;
+}
+
+.order-cover-placeholder .icon {
+  color: #9aa3b2;
+  font-size: calc(42 * 100vw / 750);
+}
+
+.order-cover-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(236, 239, 244, 0.48);
 }
 
 .order-main,
@@ -108,8 +149,16 @@
   flex-direction: column;
 }
 
+.order-main {
+  min-width: 0;
+  margin-left: calc(20 * 100vw / 750);
+}
+
 .order-title {
+  overflow: hidden;
   color: #182743;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: calc(30 * 100vw / 750);
   font-weight: 700;
 }
@@ -130,10 +179,10 @@
   font-weight: 800;
 }
 
-.order-status {
-  margin-top: calc(12 * 100vw / 750);
-  color: #17815d;
-  font-size: calc(24 * 100vw / 750);
+.order-card.is-expired .order-title,
+.order-card.is-expired .order-merchant,
+.order-card.is-expired .order-price {
+  color: #a6adba;
 }
 
 .order-enter {

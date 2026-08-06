@@ -3,7 +3,8 @@
   <view class="mine-header"><view class="mine-title-row"><text class="mine-page-title">我的</text></view></view>
   <view class="profile">
     <view class="avatar">
-      <t-icon name="user" size="56rpx" color="#ffffff" />
+      <image wx:if="{{avatar}}" class="avatar-image" src="{{avatar}}" mode="aspectFill" />
+      <t-icon wx:else name="user" size="56rpx" color="#ffffff" />
     </view>
     <view class="profile-text">
       <text class="nickname">{{nickname || '乐伴伴会员'}}</text>
@@ -36,8 +37,9 @@
         <t-icon name="{{item.icon}}" size="38rpx" color="#182743" />
       </view>
       <text class="entry-label">{{item.label}}</text>
-      <text wx:if="{{item.route === 'address' && addressSummary}}" class="entry-summary">{{addressSummary}}</text>
+      <text wx:if="{{item.route === 'address'}}" class="entry-summary">{{addressSummary || '未设置'}}</text>
       <t-icon name="chevron-right" size="34rpx" color="#9aa3b2" />
     </view>
   </view>
+  <button class="logout-button" bindtap="logout">退出登录</button>
 </view>

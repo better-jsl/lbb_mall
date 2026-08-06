@@ -7,6 +7,15 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $exe = Join-Path $root 'lbb-mall-api.exe'
+$envFile = Join-Path $root '.env'
+
+if (Test-Path -LiteralPath $envFile) {
+  Get-Content -LiteralPath $envFile | ForEach-Object {
+    if ($_ -match '^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.*?)\s*$') {
+      [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
+    }
+  }
+}
 
 function Test-BackendHealth {
   param([int]$HealthPort)

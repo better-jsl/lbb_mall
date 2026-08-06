@@ -124,6 +124,22 @@ scroll-view::-webkit-scrollbar {
   content: '';
 }
 
+.standard-tabs.top-tabs {
+  height: 54px;
+  margin-bottom: calc(28 * 100vw / 750);
+}
+
+.standard-tabs.top-tabs .top-tab {
+  font-size: 17px;
+}
+
+.standard-tabs.top-tabs .top-tab.active::after {
+  right: 40%;
+  left: 40%;
+  height: 5px;
+  border-radius: 5px;
+}
+
 .bottom-tabbar {
   position: fixed;
   z-index: 900;

@@ -31,7 +31,8 @@
     "condition": false,
     "swc": false,
     "disableSWC": true,
-    "disableUseStrict": false
+    "disableUseStrict": false,
+    "urlCheck": false
   },
   "simulatorType": "wechat",
   "simulatorPluginLibVersion": {},
@@ -46,5 +47,5 @@
     "ignore": [],
     "include": []
   },
-  "appid": "wx04984c437ef63c36"
+  "appid": "wxccc12a8af236fe20"
 }

@@ -1,9 +1,14 @@
-// app.ts
+import { loginWithWeChat } from './api/client'
+
 App<IAppOption>({
   globalData: {
     menuButtonBottom: 0,
     menuButtonTop: 0,
     menuButtonHeight: 0,
+    authToken: '',
+    loginReady: Promise.resolve(),
+    needsProfile: false,
+    login: () => {},
   },
   onLaunch() {
     const systemInfo = wx.getSystemInfoSync()
@@ -22,12 +27,27 @@ App<IAppOption>({
     logs.unshift(Date.now())
     wx.setStorageSync('logs', logs)
 
-    // 登录
-    wx.login({
-      success: res => {
-        console.log(res.code)
-        // 发送 res.code 到后台换取 openId, sessionKey, unionId
-      },
-    })
+    this.globalData.login = () => {
+      this.globalData.loginReady = new Promise((resolve) => wx.login({
+        success: async (res) => {
+          try {
+            const session = await loginWithWeChat(res.code)
+            this.globalData.authToken = session.token
+            this.globalData.profile = session.profile
+            this.globalData.needsProfile = session.needsProfile || Boolean(wx.getStorageSync('lbb-force-profile'))
+            wx.setStorageSync('lbb-auth-token', session.token)
+          } catch (error) {
+            wx.showToast({ title: error instanceof Error ? error.message : '微信登录失败', icon: 'none' })
+          } finally {
+            resolve()
+          }
+        },
+        fail: () => {
+          wx.showToast({ title: '微信登录失败', icon: 'none' })
+          resolve()
+        },
+      }))
+    }
+    this.globalData.login()
   },
 })

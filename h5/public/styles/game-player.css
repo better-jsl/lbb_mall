@@ -4,6 +4,7 @@ body {
 }
 
 .game-player-page {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -11,14 +12,16 @@ body {
 }
 
 .game-player-titlebar {
-  position: relative;
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: 0;
   display: flex;
-  flex: 0 0 calc(env(safe-area-inset-top) + 52px);
   align-items: center;
   justify-content: center;
   height: calc(env(safe-area-inset-top) + 52px);
   padding-top: env(safe-area-inset-top);
-  background: #182743;
   box-sizing: border-box;
 }
 
@@ -41,6 +44,8 @@ body {
   width: 36px;
   height: 36px;
   color: #ffffff;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .game-player-frame {

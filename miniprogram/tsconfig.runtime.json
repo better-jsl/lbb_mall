@@ -13,6 +13,8 @@
   "files": [
     "../typings/index.d.ts",
     "app.ts",
+    "api/client.ts",
+    "components/login-profile/login-profile.ts",
     "custom-tab-bar/index.ts",
     "pages/index/index.ts",
     "pages/orders/orders.ts",

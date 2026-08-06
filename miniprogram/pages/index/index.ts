@@ -1,13 +1,14 @@
 import { request } from '../../api/client'
 import { localImagePath } from '../../api/local-image'
 
-type Merchant = { id: string; name: string; pinyin: string; distance?: string }
+type Merchant = { id: string; name: string; subtitle?: string; pinyin: string; marquee?: boolean; marqueeDuration?: string }
 type PackageCard = { id: string; title: string; price: string; points: string; tag: string; gifts: string[]; tone: string; coverImage: string }
 type ExchangeCategory = { id: string; emoji: string; label: string }
-type ExchangeItem = { id: string; category: string; emoji: string; title: string; description: string; value: number; image: string; points: number; redemptionMethod: string }
+type ExchangeItem = { id: string; category: string; emoji: string; title: string; description: string; value: number; image: string; displayImage?: string; points: number; redemptionMethod: string }
 type ProfileSummary = { stats: { label: string; value: string }[] }
 type SavedAddress = { region: string[]; detail: string; contactName: string; contactPhone: string }
 type PageResponse<T> = { items: T[]; hasMore: boolean }
+type RedemptionResult = { id: string; points: number; isAppVoucher?: boolean; couponCount?: number }
 
 function normalizePage<T>(response: PageResponse<T> | T[]): PageResponse<T> {
   return Array.isArray(response) ? { items: response, hasMore: false } : response
@@ -52,6 +53,7 @@ Page({
     exchangeCategories: [] as ExchangeCategory[],
     exchangeItems: [] as ExchangeItem[],
     allExchangeItems: [] as ExchangeItem[],
+    showExchangeAnimation: true,
     showAffordableOnly: false,
     exchangePage: 1,
     exchangeHasMore: false,
@@ -65,6 +67,10 @@ Page({
     shippingAddress: null as SavedAddress | null,
     shippingAddressText: '',
     shippingContactText: '',
+    showAppVoucherPhoneDialog: false,
+    appVoucherRedemptionID: '',
+    appVoucherPhone: '',
+    claimingAppVoucher: false,
     redeeming: false,
     networkError: false,
   },
@@ -89,7 +95,11 @@ Page({
 
   async loadMerchants() {
     try {
-      const merchants = await request<Merchant[]>('/merchants')
+      const merchants = (await request<Merchant[]>('/merchants')).map((item) => ({
+        ...item,
+        marquee: item.name.length > 5,
+        marqueeDuration: Math.max(6, item.name.length * 0.65).toFixed(1),
+      }))
       this.setData({ merchants })
       for (let index = 0; index < merchants.length; index += 1) {
         const response = normalizePage(await request<PageResponse<PackageCard> | PackageCard[]>(`/merchants/${merchants[index].id}/packages?page=1&pageSize=10`))
@@ -158,13 +168,15 @@ Page({
     this.setData({ exchangeLoading: true })
     try {
       const response = normalizePage(await request<PageResponse<ExchangeItem> | ExchangeItem[]>(`/points/products?category=${encodeURIComponent(categoryID)}&page=${page}&pageSize=10`))
-      const exchangeItems = append ? [...this.data.allExchangeItems, ...response.items] : response.items
+      const displayItems = await this.loadExchangeImages(response.items)
+      const exchangeItems = append ? [...this.data.allExchangeItems, ...displayItems] : displayItems
       this.setData({
         allExchangeItems: exchangeItems,
         exchangeItems: this.filterExchangeItems(exchangeItems, this.data.showAffordableOnly, this.data.userPoints),
         exchangePage: page,
         exchangeHasMore: response.hasMore,
-      })
+        showExchangeAnimation: false,
+      }, () => wx.nextTick(() => this.setData({ showExchangeAnimation: true })))
     } catch {
       if (!append && !this.data.exchangeItems.length) this.setData({ networkError: true })
       wx.showToast({ title: '加载兑换商品失败', icon: 'none' })
@@ -175,6 +187,10 @@ Page({
 
   async loadPackageImages(packages: PackageCard[]) {
     return Promise.all(packages.map(async (item) => ({ ...item, coverImage: await localImagePath(item.coverImage) })))
+  },
+
+  async loadExchangeImages(items: ExchangeItem[]) {
+    return Promise.all(items.map(async (item) => ({ ...item, displayImage: await localImagePath(item.image) })))
   },
 
   retryNetwork() {
@@ -263,7 +279,8 @@ Page({
     this.setData({
       showAffordableOnly,
       exchangeItems: this.filterExchangeItems(this.data.allExchangeItems, showAffordableOnly, this.data.userPoints),
-    })
+      showExchangeAnimation: false,
+    }, () => wx.nextTick(() => this.setData({ showExchangeAnimation: true })))
   },
 
   async openExchangeDialog(event: WechatMiniprogram.TouchEvent) {
@@ -305,6 +322,10 @@ Page({
     this.setData({ showShippingDialog: false })
   },
 
+  closeAppVoucherPhoneDialog() {
+    this.setData({ showAppVoucherPhoneDialog: false, appVoucherRedemptionID: '', appVoucherPhone: '' })
+  },
+
   async loadShippingAddress(): Promise<Partial<SavedAddress>> {
     try {
       const saved = await request<SavedAddress | null>('/me/address')
@@ -329,12 +350,35 @@ Page({
     this.redeemSelectedProduct()
   },
 
+  onAppVoucherPhoneInput(event: WechatMiniprogram.Input) {
+    this.setData({ appVoucherPhone: event.detail.value })
+  },
+
+  async claimAppVoucher() {
+    const phone = this.data.appVoucherPhone.trim()
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      wx.showToast({ title: '请输入正确的手机号', icon: 'none' })
+      return
+    }
+    if (!this.data.appVoucherRedemptionID || this.data.claimingAppVoucher) return
+    this.setData({ claimingAppVoucher: true })
+    try {
+      await request(`/points/redemptions/${encodeURIComponent(this.data.appVoucherRedemptionID)}/app-voucher`, 'POST', { phone })
+      this.closeAppVoucherPhoneDialog()
+      wx.showToast({ title: '领取信息已提交', icon: 'success' })
+    } catch (error) {
+      wx.showToast({ title: error instanceof Error ? error.message : '领取失败', icon: 'none' })
+    } finally {
+      this.setData({ claimingAppVoucher: false })
+    }
+  },
+
   async redeemSelectedProduct() {
     const item = this.data.selectedExchangeItem
     if (!item || this.data.redeeming) return
     this.setData({ redeeming: true })
     try {
-      const result = await request<{ id: string; points: number }>(`/points/products/${encodeURIComponent(item.id)}/redeem`, 'POST')
+      const result = await request<RedemptionResult>(`/points/products/${encodeURIComponent(item.id)}/redeem`, 'POST')
       const userPoints = String(result.points)
       this.setData({
         showExchangeDialog: false,
@@ -344,6 +388,17 @@ Page({
         exchangeItems: this.filterExchangeItems(this.data.allExchangeItems, this.data.showAffordableOnly, userPoints),
       })
       wx.showToast({ title: '兑换成功', icon: 'success' })
+	  if (result.isAppVoucher) {
+		wx.showModal({
+		  title: '兑换成功',
+		  content: '优惠券已到账，是否现在就使用？',
+		  cancelText: '稍后使用',
+		  confirmText: '现在使用',
+		  success: (modal) => {
+			if (modal.confirm) this.setData({ showAppVoucherPhoneDialog: true, appVoucherRedemptionID: result.id })
+		  },
+		})
+	  }
     } catch (error) {
       wx.showToast({ title: error instanceof Error ? error.message : '兑换失败', icon: 'none' })
     } finally {

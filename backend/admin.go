@@ -35,13 +35,17 @@ type adminPackage struct {
 type adminMerchant struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`
+	Subtitle  string         `json:"subtitle"`
 	Pinyin    string         `json:"pinyin"`
+	Location  string         `json:"location"`
 	SortOrder int            `json:"sortOrder"`
 	Packages  []adminPackage `json:"packages"`
 }
 
 type adminMerchantInput struct {
-	Name string `json:"name"`
+	Name     string `json:"name"`
+	Subtitle string `json:"subtitle"`
+	Location string `json:"location"`
 }
 
 type adminPackageInput struct {
@@ -99,7 +103,7 @@ func (a *app) uploadAdminImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) adminMerchants(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(r.Context(), `SELECT id, name, pinyin, sort_order FROM merchants ORDER BY sort_order, created_at`)
+	rows, err := a.db.QueryContext(r.Context(), `SELECT id, name, COALESCE(subtitle, ''), pinyin, COALESCE(location, ''), sort_order FROM merchants ORDER BY sort_order, created_at`)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -109,7 +113,7 @@ func (a *app) adminMerchants(w http.ResponseWriter, r *http.Request) {
 	items := []adminMerchant{}
 	for rows.Next() {
 		var item adminMerchant
-		if err := rows.Scan(&item.ID, &item.Name, &item.Pinyin, &item.SortOrder); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Subtitle, &item.Pinyin, &item.Location, &item.SortOrder); err != nil {
 			serverError(w, err)
 			return
 		}
@@ -166,7 +170,7 @@ func (a *app) createAdminMerchant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := newID("merchant")
-	if _, err := a.db.ExecContext(r.Context(), `INSERT INTO merchants(id, name, pinyin, sort_order) VALUES($1, $2, $3, $4)`, id, input.Name, strings.ToLower(input.Name), sortOrder); err != nil {
+	if _, err := a.db.ExecContext(r.Context(), `INSERT INTO merchants(id, name, subtitle, pinyin, location, sort_order) VALUES($1, $2, $3, $4, $5, $6)`, id, input.Name, strings.TrimSpace(input.Subtitle), strings.ToLower(input.Name), strings.TrimSpace(input.Location), sortOrder); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -183,7 +187,7 @@ func (a *app) updateAdminMerchant(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "商家名称不能为空")
 		return
 	}
-	result, err := a.db.ExecContext(r.Context(), `UPDATE merchants SET name = $1, pinyin = $2, updated_at = NOW() WHERE id = $3`, input.Name, strings.ToLower(input.Name), r.PathValue("id"))
+	result, err := a.db.ExecContext(r.Context(), `UPDATE merchants SET name = $1, subtitle = $2, pinyin = $3, location = $4, updated_at = NOW() WHERE id = $5`, input.Name, strings.TrimSpace(input.Subtitle), strings.ToLower(input.Name), strings.TrimSpace(input.Location), r.PathValue("id"))
 	if err != nil {
 		serverError(w, err)
 		return
@@ -513,7 +517,7 @@ func seedAdminFields(db *sql.DB) error {
 	statements := []string{
 		`UPDATE packages SET cover_image = CASE id WHEN 'pkg-1' THEN 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=480&q=80' WHEN 'pkg-2' THEN 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=480&q=80' WHEN 'pkg-3' THEN 'https://images.unsplash.com/photo-1543007630-9710e4a00a20?auto=format&fit=crop&w=480&q=80' ELSE 'https://images.unsplash.com/photo-1527281400683-1aae777175f8?auto=format&fit=crop&w=480&q=80' END WHERE cover_image IS NULL OR cover_image = ''`,
 		`UPDATE packages SET package_images = jsonb_build_array(cover_image) WHERE package_images IS NULL OR package_images = '[]'::jsonb`,
-		`UPDATE profile SET nickname = CASE WHEN nickname IS NULL OR nickname = '' THEN '乐伴伴会员' ELSE nickname END, avatar = CASE WHEN avatar IS NULL OR avatar = '' THEN 'https://api.dicebear.com/9.x/initials/svg?seed=LBB' ELSE avatar END, phone = CASE WHEN phone IS NULL OR phone = '' THEN '13800000000' ELSE phone END`,
+		`UPDATE profile SET nickname = CASE WHEN nickname IS NULL OR nickname = '' THEN '乐伴伴会员' ELSE nickname END, avatar = CASE WHEN avatar IS NULL OR avatar = '' THEN 'https://api.dicebear.com/9.x/initials/svg?seed=LBB' ELSE avatar END, phone = CASE WHEN phone IS NULL OR phone = '' THEN '13800000000' ELSE phone END WHERE id = 'demo-user'`,
 		`UPDATE orders SET user_id = 'demo-user' WHERE user_id IS NULL OR user_id = ''`,
 	}
 	for _, statement := range statements {

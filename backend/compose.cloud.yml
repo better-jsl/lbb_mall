@@ -4,6 +4,9 @@ services:
     environment:
       PORT: "8080"
       DATABASE_URL: postgres://lbb:${POSTGRES_PASSWORD}@postgres:5432/lbb_mall?sslmode=disable
+      WECHAT_APP_ID: ${WECHAT_APP_ID}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET}
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET}
     ports:
       - "8080:8080"
     depends_on:

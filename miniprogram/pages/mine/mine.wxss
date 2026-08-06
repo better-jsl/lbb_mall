@@ -48,6 +48,12 @@ page {
   border: 2rpx solid rgba(255, 255, 255, 0.24);
   border-radius: 999rpx;
   background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
 }
 
 .profile-text {
@@ -157,4 +163,22 @@ page {
   white-space: nowrap;
   font-size: 22rpx;
   font-weight: 400;
+}
+
+.logout-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 88rpx;
+  margin-top: 36rpx;
+  border: 1rpx solid #d7dee9;
+  border-radius: 44rpx;
+  background: #ffffff;
+  color: #5d6a7e;
+  font-size: 28rpx;
+}
+
+.logout-button::after {
+  border: 0;
 }

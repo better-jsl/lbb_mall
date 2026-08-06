@@ -5,13 +5,21 @@
 
 .points-page {
   min-height: 100vh;
-  padding: var(--menu-button-top) calc(32 * 100vw / 750) calc(calc(48 * 100vw / 750) + env(safe-area-inset-bottom));
+  padding: calc(var(--menu-button-top) + var(--menu-button-height)) calc(32 * 100vw / 750) calc(calc(48 * 100vw / 750) + env(safe-area-inset-bottom));
 }
 
-.page-header {
+.points-page .page-header {
   display: flex;
   align-items: center;
-  height: var(--menu-button-height);
+  position: fixed;
+  z-index: 10;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: calc(var(--menu-button-top) + var(--menu-button-height));
+  padding: var(--menu-button-top) calc(32 * 100vw / 750) 0;
+  background: #f4f6fb;
+  box-sizing: border-box;
 }
 
 .back-button {
@@ -109,5 +117,14 @@
 
 .record-points.expense {
   color: #d65a63;
+}
+
+@media (min-width: 520px) {
+  .points-page .page-header {
+    right: auto;
+    left: 50%;
+    width: 430px;
+    transform: translateX(-50%);
+  }
 }
 

@@ -31,14 +31,11 @@ page {
 }
 
 .coupon-tabs {
-  margin-top: 30rpx;
-  --td-brand-color: #182743;
-  --td-tab-nav-bg-color: transparent;
-  --td-bg-color-container: transparent;
+  margin: 8rpx -4rpx 28rpx;
 }
 
 .coupon-list {
-  margin-top: 24rpx;
+  margin-top: 0;
 }
 
 .coupon-card {
@@ -114,6 +111,93 @@ page {
 .coupon-card.used,
 .coupon-card.expired {
   opacity: 0.62;
+}
+
+.coupon-card.is-app-voucher {
+  cursor: pointer;
+}
+
+.coupon-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+  background: rgba(24, 39, 67, 0.18);
+  box-sizing: border-box;
+}
+
+.coupon-dialog-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.coupon-dialog-close {
+  position: absolute;
+  top: -72rpx;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: #5d6a7e;
+}
+
+.coupon-dialog {
+  width: 100%;
+  padding: 44rpx 40rpx 36rpx;
+  border-radius: 32rpx;
+  background: #ffffff;
+  box-shadow: 0 24rpx 64rpx rgba(24, 39, 67, 0.2);
+  box-sizing: border-box;
+}
+
+.coupon-dialog-title {
+  display: block;
+  color: #182743;
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.coupon-dialog-warning {
+  display: block;
+  margin-top: 16rpx;
+  color: #e34d59;
+  text-align: center;
+  font-size: 23rpx;
+  line-height: 36rpx;
+}
+
+.coupon-phone-input {
+  width: 100%;
+  height: 84rpx;
+  margin-top: 20rpx;
+  padding: 0 24rpx;
+  border: 0;
+  border-radius: 16rpx;
+  background: #f1f3f6;
+  box-sizing: border-box;
+  color: #182743;
+  font-size: 28rpx;
+}
+
+.coupon-dialog-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  margin-top: 34rpx;
+  border-radius: 44rpx;
+  background: #182743;
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 800;
 }
 
 .coupon-card.used .coupon-value,

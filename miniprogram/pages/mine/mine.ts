@@ -1,4 +1,5 @@
 import { request } from '../../api/client'
+import { localImagePath } from '../../api/local-image'
 
 type Stat = { label: string; value: string }
 type SavedAddress = { region: string[] }
@@ -11,6 +12,7 @@ Page({
     menuButtonBottom: 0,
     addressSummary: '',
     nickname: '',
+    avatar: '',
     stats: [] as Stat[],
     networkError: false,
     entries: [
@@ -23,7 +25,7 @@ Page({
     this.setData({ menuButtonTop: app.globalData.menuButtonTop, menuButtonHeight: app.globalData.menuButtonHeight, menuButtonBottom: app.globalData.menuButtonBottom })
   },
   onShow() { const tabBar = this.getTabBar && this.getTabBar(); if (tabBar) tabBar.setData({ selected: 3 }); this.loadSummary(); this.loadAddressSummary() },
-  async loadSummary() { try { const summary = await request<ProfileSummary>('/me/summary'); this.setData({ stats: summary.stats, nickname: summary.profile.nickname, networkError: false }) } catch { this.setData({ networkError: true }); wx.showToast({ title: '加载个人信息失败', icon: 'none' }) } },
+  async loadSummary() { try { const summary = await request<ProfileSummary>('/me/summary'); const avatar = await localImagePath(summary.profile.avatar); this.setData({ stats: summary.stats, nickname: summary.profile.nickname, avatar, networkError: false }) } catch { this.setData({ networkError: true }); wx.showToast({ title: '加载个人信息失败', icon: 'none' }) } },
   retryNetwork() { this.setData({ networkError: false }); this.loadSummary(); this.loadAddressSummary() },
   goVerification() {
     wx.scanCode({ scanType: ['qrCode', 'barCode'], success: async ({ result }) => {
@@ -34,7 +36,7 @@ Page({
   async loadAddressSummary() {
     try {
       const saved = await request<SavedAddress | null>('/me/address')
-      this.setData({ addressSummary: saved ? saved.region.join(' ') : '' })
+      this.setData({ addressSummary: saved ? '已设置' : '' })
     } catch {
       this.setData({ addressSummary: '' })
     }
@@ -43,5 +45,22 @@ Page({
     const route = String(event.currentTarget.dataset.route)
     if (route === 'address') wx.navigateTo({ url: '/pages/common-address/common-address' })
     if (route === 'orders') wx.switchTab({ url: '/pages/orders/orders' })
+  },
+  logout() {
+    wx.showModal({
+      title: '退出登录',
+      content: '退出后将重新进行微信登录和授权。',
+      success: (result) => {
+        if (!result.confirm) return
+        const app = getApp<IAppOption>()
+        wx.removeStorageSync('lbb-auth-token')
+        wx.setStorageSync('lbb-force-profile', true)
+        app.globalData.authToken = ''
+        app.globalData.profile = undefined
+        app.globalData.needsProfile = true
+        app.globalData.login()
+        wx.reLaunch({ url: '/pages/index/index' })
+      },
+    })
   },
 })

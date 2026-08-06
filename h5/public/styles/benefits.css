@@ -218,6 +218,18 @@
   margin-top: calc(28 * 100vw / 750);
 }
 
+.benefit-game-hero {
+  display: block;
+  width: 100%;
+  height: calc(292 * 100vw / 750);
+  border-radius: calc(20 * 100vw / 750);
+  object-fit: cover;
+}
+
+.benefit-games + .benefit-points-card {
+  margin-top: calc(28 * 100vw / 750);
+}
+
 .benefit-game-item {
   display: block;
   aspect-ratio: 1;

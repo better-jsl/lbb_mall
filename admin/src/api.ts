@@ -17,7 +17,9 @@ export type AdminPackage = {
 export type Merchant = {
   id: string
   name: string
+  subtitle: string
   pinyin: string
+  location: string
   sortOrder: number
   packages: AdminPackage[]
 }
@@ -56,7 +58,7 @@ export type AdminOrderDetail = Order & {
 
 export type ListResult<T> = { items: T[]; total: number; page: number; size: number }
 
-export type PointsCategory = { id: string; label: string; emoji: string }
+export type PointsCategory = { id: string; label: string; emoji: string; image: string }
 export type PointsMallItem = { id: string; category: string; title: string; description: string; redemptionMethod: string; value: number; image: string; emoji: string; points: number }
 export type AdminGame = { id: string; image: string; title: string; description: string; link: string; active: boolean }
 export type ChartItem = { label: string; value: number }

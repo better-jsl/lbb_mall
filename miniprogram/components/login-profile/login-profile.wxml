@@ -1,0 +1,21 @@
+<view wx:if="{{visible}}" class="login-profile-layer">
+  <view class="login-profile-card">
+    <block wx:if="{{step === 'phone'}}">
+      <text class="login-profile-title">授权手机号</text>
+      <text class="login-profile-note">用于保存你的积分和订单</text>
+      <button class="login-phone-button login-phone-only" open-type="getPhoneNumber" bindgetphonenumber="authorizePhone" loading="{{saving}}">授权手机号</button>
+    </block>
+    <block wx:else>
+      <text class="login-profile-title">完善微信资料</text>
+      <text class="login-profile-note">头像和昵称将展示在我的页面</text>
+      <button class="login-avatar-button" open-type="chooseAvatar" bindchooseavatar="chooseAvatar">
+        <view class="login-avatar-frame">
+          <image wx:if="{{avatarPreview}}" class="login-avatar-image" src="{{avatarPreview}}" mode="aspectFill" />
+          <text wx:else class="login-avatar-placeholder">选择头像</text>
+        </view>
+      </button>
+      <input class="login-nickname-input" type="nickname" placeholder="请输入微信昵称" value="{{nickname}}" bindinput="inputNickname" />
+      <button class="login-phone-button" bindtap="confirmProfile" loading="{{saving}}">确定</button>
+    </block>
+  </view>
+</view>

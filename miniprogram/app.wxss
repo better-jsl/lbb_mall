@@ -11,3 +11,14 @@ button,
 image {
   box-sizing: border-box;
 }
+
+.standard-tabs {
+  --td-brand-color: #182743;
+  --td-tab-nav-bg-color: transparent;
+  --td-bg-color-container: transparent;
+  --td-tab-item-height: 96rpx;
+  --td-tab-font: 34rpx / 48rpx PingFang SC, Microsoft YaHei, Arial, sans-serif;
+  --td-tab-track-width: 64rpx;
+  --td-tab-track-thickness: 8rpx;
+  --td-tab-track-radius: 999rpx;
+}

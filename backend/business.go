@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 )
-
-const currentUserID = "demo-user"
 
 type pointsProductInput struct {
 	Category         string  `json:"category"`
@@ -88,7 +87,8 @@ func (a *app) redeemPointsProduct(w http.ResponseWriter, r *http.Request) {
 
 	var title, method string
 	var cost, stock int
-	err = tx.QueryRowContext(r.Context(), `SELECT title, redemption_method, points, stock FROM points_products WHERE id = $1 AND active = TRUE FOR UPDATE`, r.PathValue("id")).Scan(&title, &method, &cost, &stock)
+	var value float64
+	err = tx.QueryRowContext(r.Context(), `SELECT title, redemption_method, value, points, stock FROM points_products WHERE id = $1 AND active = TRUE FOR UPDATE`, r.PathValue("id")).Scan(&title, &method, &value, &cost, &stock)
 	if err == sql.ErrNoRows {
 		notFound(w)
 		return
@@ -102,8 +102,8 @@ func (a *app) redeemPointsProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var balance int
-	if err = tx.QueryRowContext(r.Context(), `SELECT points FROM profile WHERE id = $1 FOR UPDATE`, currentUserID).Scan(&balance); err != nil {
+	var balance, coupons int
+	if err = tx.QueryRowContext(r.Context(), `SELECT points, coupons FROM profile WHERE id = $1 FOR UPDATE`, requestUserID(r)).Scan(&balance, &coupons); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -115,7 +115,7 @@ func (a *app) redeemPointsProduct(w http.ResponseWriter, r *http.Request) {
 	addressSnapshot := "{}"
 	if method == "快递邮寄" {
 		var province, city, district, detail, contactName, contactPhone string
-		err = tx.QueryRowContext(r.Context(), `SELECT province, city, district, detail, contact_name, contact_phone FROM user_addresses WHERE user_id = $1`, currentUserID).Scan(&province, &city, &district, &detail, &contactName, &contactPhone)
+		err = tx.QueryRowContext(r.Context(), `SELECT province, city, district, detail, contact_name, contact_phone FROM user_addresses WHERE user_id = $1`, requestUserID(r)).Scan(&province, &city, &district, &detail, &contactName, &contactPhone)
 		if err == sql.ErrNoRows {
 			respond(w, http.StatusBadRequest, map[string]string{"message": "请先设置收货地址"})
 			return
@@ -129,7 +129,13 @@ func (a *app) redeemPointsProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redemptionID := newID("redemption")
-	if _, err = tx.ExecContext(r.Context(), `UPDATE profile SET points = points - $1, updated_at = NOW() WHERE id = $2`, cost, currentUserID); err != nil {
+	isAppVoucher := isAppVoucherMethod(method)
+	if isAppVoucher {
+		_, err = tx.ExecContext(r.Context(), `UPDATE profile SET points = points - $1, coupons = coupons + 1, updated_at = NOW() WHERE id = $2`, cost, requestUserID(r))
+	} else {
+		_, err = tx.ExecContext(r.Context(), `UPDATE profile SET points = points - $1, updated_at = NOW() WHERE id = $2`, cost, requestUserID(r))
+	}
+	if err != nil {
 		serverError(w, err)
 		return
 	}
@@ -139,11 +145,17 @@ func (a *app) redeemPointsProduct(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if _, err = tx.ExecContext(r.Context(), `INSERT INTO points_redemptions(id, user_id, product_id, points_cost, status, address_snapshot, created_at, updated_at) VALUES($1,$2,$3,$4,'pending',$5::jsonb,NOW(),NOW())`, redemptionID, currentUserID, r.PathValue("id"), cost, addressSnapshot); err != nil {
+	if _, err = tx.ExecContext(r.Context(), `INSERT INTO points_redemptions(id, user_id, product_id, points_cost, status, address_snapshot, created_at, updated_at) VALUES($1,$2,$3,$4,'pending',$5::jsonb,NOW(),NOW())`, redemptionID, requestUserID(r), r.PathValue("id"), cost, addressSnapshot); err != nil {
 		serverError(w, err)
 		return
 	}
-	if _, err = tx.ExecContext(r.Context(), `INSERT INTO point_records(id, user_id, title, occurred_at, change, created_at, updated_at) VALUES($1,$2,$3,NOW(),$4,NOW(),NOW())`, newID("point"), currentUserID, "积分兑换："+title, -cost); err != nil {
+	if isAppVoucher {
+		if _, err = tx.ExecContext(r.Context(), `INSERT INTO coupons(id, user_id, redemption_id, value, title, note, date_text, status, state, sort_order, created_at, updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,'待使用','available',0,NOW(),NOW())`, newID("coupon"), requestUserID(r), redemptionID, value, title, "乐伴伴 App 内使用，填写登录手机号后即可领取", "App 抵用券"); err != nil {
+			serverError(w, err)
+			return
+		}
+	}
+	if _, err = tx.ExecContext(r.Context(), `INSERT INTO point_records(id, user_id, title, occurred_at, change, created_at, updated_at) VALUES($1,$2,$3,NOW(),$4,NOW(),NOW())`, newID("point"), requestUserID(r), "积分兑换："+title, -cost); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -151,11 +163,53 @@ func (a *app) redeemPointsProduct(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	respond(w, http.StatusCreated, map[string]any{"id": redemptionID, "points": balance - cost})
+	respond(w, http.StatusCreated, map[string]any{"id": redemptionID, "points": balance - cost, "isAppVoucher": isAppVoucher, "couponCount": coupons + boolToInt(isAppVoucher)})
+}
+
+func isAppVoucherMethod(method string) bool {
+	return strings.EqualFold(strings.TrimSpace(method), "APP抵用券")
+}
+
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func (a *app) claimAppVoucher(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Phone string `json:"phone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		badRequest(w, "请输入乐伴伴 App 登录手机号")
+		return
+	}
+	phone := strings.TrimSpace(input.Phone)
+	if !regexp.MustCompile(`^1[3-9][0-9]{9}$`).MatchString(phone) {
+		badRequest(w, "请输入正确的手机号")
+		return
+	}
+
+	result, err := a.db.ExecContext(r.Context(), `UPDATE points_redemptions pr SET app_phone=$1, updated_at=NOW() FROM points_products pp WHERE pr.product_id=pp.id AND pr.id=$2 AND pr.user_id=$3 AND LOWER(BTRIM(pp.redemption_method))=LOWER('APP抵用券') AND COALESCE(pr.app_phone,'')=''`, phone, r.PathValue("id"), requestUserID(r))
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if updated == 0 {
+		badRequest(w, "该抵用券无法重复领取")
+		return
+	}
+	respond(w, http.StatusOK, map[string]string{"message": "领取信息已提交"})
 }
 
 func (a *app) pointsRedemptions(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(r.Context(), `SELECT pr.id, pp.title, pr.points_cost, pr.status, pr.created_at::text FROM points_redemptions pr JOIN points_products pp ON pp.id = pr.product_id WHERE pr.user_id = $1 ORDER BY pr.created_at DESC`, currentUserID)
+	rows, err := a.db.QueryContext(r.Context(), `SELECT pr.id, pp.title, pr.points_cost, pr.status, pr.created_at::text FROM points_redemptions pr JOIN points_products pp ON pp.id = pr.product_id WHERE pr.user_id = $1 ORDER BY pr.created_at DESC`, requestUserID(r))
 	if err != nil {
 		serverError(w, err)
 		return
@@ -177,7 +231,7 @@ func (a *app) pointsRedemptions(w http.ResponseWriter, r *http.Request) {
 func (a *app) pointsRedemptionOrderDetail(w http.ResponseWriter, r *http.Request) {
 	var id, title, method, status, createdAt, addressRaw string
 	var points int
-	err := a.db.QueryRowContext(r.Context(), `SELECT pr.id,pp.title,pp.redemption_method,pr.points_cost,pr.status,pr.created_at::text,COALESCE(pr.address_snapshot,'{}'::jsonb)::text FROM points_redemptions pr JOIN points_products pp ON pp.id=pr.product_id WHERE pr.id=$1 AND pr.user_id=$2`, r.PathValue("id"), currentUserID).Scan(&id, &title, &method, &points, &status, &createdAt, &addressRaw)
+	err := a.db.QueryRowContext(r.Context(), `SELECT pr.id,pp.title,pp.redemption_method,pr.points_cost,pr.status,pr.created_at::text,COALESCE(pr.address_snapshot,'{}'::jsonb)::text FROM points_redemptions pr JOIN points_products pp ON pp.id=pr.product_id WHERE pr.id=$1 AND pr.user_id=$2`, r.PathValue("id"), requestUserID(r)).Scan(&id, &title, &method, &points, &status, &createdAt, &addressRaw)
 	if err == sql.ErrNoRows {
 		respond(w, http.StatusNotFound, map[string]string{"message": "order not found"})
 		return
@@ -281,9 +335,9 @@ func (a *app) dailyTasks(w http.ResponseWriter, r *http.Request) {
 		}
 		var completed bool
 		if id == "check-in" {
-			err = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM daily_check_ins WHERE user_id = $1 AND check_in_date = CURRENT_DATE)`, currentUserID).Scan(&completed)
+			err = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM daily_check_ins WHERE user_id = $1 AND check_in_date = CURRENT_DATE)`, requestUserID(r)).Scan(&completed)
 		} else {
-			err = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM daily_task_completions WHERE user_id = $1 AND task_id = $2 AND completed_on = CURRENT_DATE)`, currentUserID, id).Scan(&completed)
+			err = a.db.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM daily_task_completions WHERE user_id = $1 AND task_id = $2 AND completed_on = CURRENT_DATE)`, requestUserID(r), id).Scan(&completed)
 		}
 		if err != nil {
 			serverError(w, err)
@@ -318,24 +372,24 @@ func (a *app) completeDailyTask(w http.ResponseWriter, r *http.Request) {
 	}
 	completionID := newID("task")
 	var insertedID string
-	err = tx.QueryRowContext(r.Context(), `INSERT INTO daily_task_completions(id,user_id,task_id,completed_on,points,created_at,updated_at) VALUES($1,$2,$3,CURRENT_DATE,$4,NOW(),NOW()) ON CONFLICT(user_id,task_id,completed_on) DO NOTHING RETURNING id`, completionID, currentUserID, r.PathValue("id"), reward).Scan(&insertedID)
+	err = tx.QueryRowContext(r.Context(), `INSERT INTO daily_task_completions(id,user_id,task_id,completed_on,points,created_at,updated_at) VALUES($1,$2,$3,CURRENT_DATE,$4,NOW(),NOW()) ON CONFLICT(user_id,task_id,completed_on) DO NOTHING RETURNING id`, completionID, requestUserID(r), r.PathValue("id"), reward).Scan(&insertedID)
 	if err != nil && err != sql.ErrNoRows {
 		serverError(w, err)
 		return
 	}
 	awarded := err != sql.ErrNoRows
 	if awarded {
-		if _, err = tx.ExecContext(r.Context(), `UPDATE profile SET points = points + $1, updated_at = NOW() WHERE id = $2`, reward, currentUserID); err != nil {
+		if _, err = tx.ExecContext(r.Context(), `UPDATE profile SET points = points + $1, updated_at = NOW() WHERE id = $2`, reward, requestUserID(r)); err != nil {
 			serverError(w, err)
 			return
 		}
-		if _, err = tx.ExecContext(r.Context(), `INSERT INTO point_records(id,user_id,title,occurred_at,change,created_at,updated_at) VALUES($1,$2,$3,NOW(),$4,NOW(),NOW())`, newID("point"), currentUserID, title, reward); err != nil {
+		if _, err = tx.ExecContext(r.Context(), `INSERT INTO point_records(id,user_id,title,occurred_at,change,created_at,updated_at) VALUES($1,$2,$3,NOW(),$4,NOW(),NOW())`, newID("point"), requestUserID(r), title, reward); err != nil {
 			serverError(w, err)
 			return
 		}
 	}
 	var points int
-	if err = tx.QueryRowContext(r.Context(), `SELECT points FROM profile WHERE id = $1`, currentUserID).Scan(&points); err != nil {
+	if err = tx.QueryRowContext(r.Context(), `SELECT points FROM profile WHERE id = $1`, requestUserID(r)).Scan(&points); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -349,7 +403,7 @@ func (a *app) completeDailyTask(w http.ResponseWriter, r *http.Request) {
 func (a *app) games(w http.ResponseWriter, r *http.Request) {
 	rows, err := a.db.QueryContext(r.Context(), `SELECT g.id,g.emoji,g.title,g.rule,g.description,g.points,g.daily_limit,g.team_size,g.tone,
 		(SELECT COUNT(*) FROM game_plays gp WHERE gp.game_id=g.id AND gp.user_id=$1 AND gp.played_on=CURRENT_DATE)
-		FROM games g WHERE g.active=TRUE ORDER BY g.sort_order,g.created_at`, currentUserID)
+		FROM games g WHERE g.active=TRUE ORDER BY g.sort_order,g.created_at`, requestUserID(r))
 	if err != nil {
 		serverError(w, err)
 		return
@@ -395,7 +449,7 @@ func (a *app) playGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var played int
-	if err = tx.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM game_plays WHERE user_id=$1 AND game_id=$2 AND played_on=CURRENT_DATE`, currentUserID, r.PathValue("id")).Scan(&played); err != nil {
+	if err = tx.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM game_plays WHERE user_id=$1 AND game_id=$2 AND played_on=CURRENT_DATE`, requestUserID(r), r.PathValue("id")).Scan(&played); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -404,20 +458,20 @@ func (a *app) playGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	playID := newID("game-play")
-	if _, err = tx.ExecContext(r.Context(), `INSERT INTO game_plays(id,user_id,game_id,played_on,points,created_at,updated_at) VALUES($1,$2,$3,CURRENT_DATE,$4,NOW(),NOW())`, playID, currentUserID, r.PathValue("id"), reward); err != nil {
+	if _, err = tx.ExecContext(r.Context(), `INSERT INTO game_plays(id,user_id,game_id,played_on,points,created_at,updated_at) VALUES($1,$2,$3,CURRENT_DATE,$4,NOW(),NOW())`, playID, requestUserID(r), r.PathValue("id"), reward); err != nil {
 		serverError(w, err)
 		return
 	}
-	if _, err = tx.ExecContext(r.Context(), `UPDATE profile SET points=points+$1,updated_at=NOW() WHERE id=$2`, reward, currentUserID); err != nil {
+	if _, err = tx.ExecContext(r.Context(), `UPDATE profile SET points=points+$1,updated_at=NOW() WHERE id=$2`, reward, requestUserID(r)); err != nil {
 		serverError(w, err)
 		return
 	}
-	if _, err = tx.ExecContext(r.Context(), `INSERT INTO point_records(id,user_id,title,occurred_at,change,created_at,updated_at) VALUES($1,$2,$3,NOW(),$4,NOW(),NOW())`, newID("point"), currentUserID, "游戏奖励："+title, reward); err != nil {
+	if _, err = tx.ExecContext(r.Context(), `INSERT INTO point_records(id,user_id,title,occurred_at,change,created_at,updated_at) VALUES($1,$2,$3,NOW(),$4,NOW(),NOW())`, newID("point"), requestUserID(r), "游戏奖励："+title, reward); err != nil {
 		serverError(w, err)
 		return
 	}
 	var points int
-	if err = tx.QueryRowContext(r.Context(), `SELECT points FROM profile WHERE id=$1`, currentUserID).Scan(&points); err != nil {
+	if err = tx.QueryRowContext(r.Context(), `SELECT points FROM profile WHERE id=$1`, requestUserID(r)).Scan(&points); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -429,7 +483,7 @@ func (a *app) playGame(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) adminPointsCatalog(w http.ResponseWriter, r *http.Request) {
-	categoryRows, err := a.db.QueryContext(r.Context(), `SELECT id,label,emoji FROM points_categories ORDER BY sort_order,created_at`)
+	categoryRows, err := a.db.QueryContext(r.Context(), `SELECT id,label,emoji,COALESCE(image,'') FROM points_categories ORDER BY sort_order,created_at`)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -437,12 +491,12 @@ func (a *app) adminPointsCatalog(w http.ResponseWriter, r *http.Request) {
 	defer categoryRows.Close()
 	categories := []map[string]any{}
 	for categoryRows.Next() {
-		var id, label, emoji string
-		if err := categoryRows.Scan(&id, &label, &emoji); err != nil {
+		var id, label, emoji, image string
+		if err := categoryRows.Scan(&id, &label, &emoji, &image); err != nil {
 			serverError(w, err)
 			return
 		}
-		categories = append(categories, map[string]any{"id": id, "label": label, "emoji": emoji})
+		categories = append(categories, map[string]any{"id": id, "label": label, "emoji": emoji, "image": image})
 	}
 	productRows, err := a.db.QueryContext(r.Context(), `SELECT id,category_id,title,description,redemption_method,value,COALESCE(image,''),emoji,points FROM points_products ORDER BY category_id,sort_order,created_at`)
 	if err != nil {
@@ -583,6 +637,7 @@ func (a *app) createAdminPointsCategory(w http.ResponseWriter, r *http.Request) 
 	var input struct {
 		Label string `json:"label"`
 		Emoji string `json:"emoji"`
+		Image string `json:"image"`
 	}
 	if !readJSON(w, r, &input) {
 		return
@@ -598,7 +653,7 @@ func (a *app) createAdminPointsCategory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	id := newID("points-category")
-	if _, err := a.db.ExecContext(r.Context(), `INSERT INTO points_categories(id,label,emoji,sort_order,active,created_at,updated_at) VALUES($1,$2,$3,$4,TRUE,NOW(),NOW())`, id, input.Label, input.Emoji, sortOrder); err != nil {
+	if _, err := a.db.ExecContext(r.Context(), `INSERT INTO points_categories(id,label,emoji,image,sort_order,active,created_at,updated_at) VALUES($1,$2,$3,$4,$5,TRUE,NOW(),NOW())`, id, input.Label, input.Emoji, input.Image, sortOrder); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -609,6 +664,7 @@ func (a *app) updateAdminPointsCategory(w http.ResponseWriter, r *http.Request) 
 	var input struct {
 		Label string `json:"label"`
 		Emoji string `json:"emoji"`
+		Image string `json:"image"`
 	}
 	if !readJSON(w, r, &input) {
 		return
@@ -618,7 +674,7 @@ func (a *app) updateAdminPointsCategory(w http.ResponseWriter, r *http.Request) 
 		badRequest(w, "分类名称不能为空")
 		return
 	}
-	result, err := a.db.ExecContext(r.Context(), `UPDATE points_categories SET label=$1,emoji=$2,updated_at=NOW() WHERE id=$3`, input.Label, input.Emoji, r.PathValue("id"))
+	result, err := a.db.ExecContext(r.Context(), `UPDATE points_categories SET label=$1,emoji=$2,image=$3,updated_at=NOW() WHERE id=$4`, input.Label, input.Emoji, input.Image, r.PathValue("id"))
 	if err != nil {
 		serverError(w, err)
 		return
