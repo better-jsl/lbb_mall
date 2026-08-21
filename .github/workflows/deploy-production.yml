@@ -1,0 +1,116 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - admin/**
+      - backend/**
+      - .github/workflows/deploy-production.yml
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Component to deploy
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - admin
+          - backend
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  determine-target:
+    runs-on: ubuntu-latest
+    outputs:
+      deploy_admin: ${{ steps.target.outputs.deploy_admin }}
+      deploy_backend: ${{ steps.target.outputs.deploy_backend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: target
+        shell: bash
+        run: |
+          admin=false
+          backend=false
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            case "${{ inputs.target }}" in
+              all) admin=true; backend=true ;;
+              admin) admin=true ;;
+              backend) backend=true ;;
+            esac
+          elif [[ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]; then
+            admin=true
+            backend=true
+          else
+            changed_files="$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")"
+            grep -q '^admin/' <<< "$changed_files" && admin=true || true
+            grep -q '^backend/' <<< "$changed_files" && backend=true || true
+          fi
+
+          echo "deploy_admin=$admin" >> "$GITHUB_OUTPUT"
+          echo "deploy_backend=$backend" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: determine-target
+    if: needs.determine-target.outputs.deploy_admin == 'true' || needs.determine-target.outputs.deploy_backend == 'true'
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ vars.PRODUCTION_SSH_HOST }}
+      DEPLOY_USER: ${{ vars.PRODUCTION_SSH_USER }}
+      DEPLOY_PATH: ${{ vars.PRODUCTION_APP_PATH }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure deployment SSH key
+        uses: webfactory/ssh-agent@v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.PRODUCTION_DEPLOY_SSH_KEY }}
+
+      - name: Trust production host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Build admin
+        if: needs.determine-target.outputs.deploy_admin == 'true'
+        working-directory: admin
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload admin
+        if: needs.determine-target.outputs.deploy_admin == 'true'
+        run: |
+          tar -C admin/dist -czf /tmp/lbb-admin-dist.tgz .
+          scp /tmp/lbb-admin-dist.tgz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/lbb-admin-dist.tgz"
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" "sudo mkdir -p '$DEPLOY_PATH/backend/www/admin' && sudo tar -xzf /tmp/lbb-admin-dist.tgz -C '$DEPLOY_PATH/backend/www/admin'"
+
+      - name: Upload and rebuild backend
+        if: needs.determine-target.outputs.deploy_backend == 'true'
+        run: |
+          tar -czf /tmp/lbb-backend-source.tgz \
+            --exclude=backend/.env \
+            --exclude=backend/.go-cache \
+            --exclude=backend/.gocache \
+            --exclude=backend/secrets \
+            --exclude=backend/uploads \
+            --exclude=backend/www \
+            --exclude=backend/lbb-mall-api.exe \
+            backend
+          scp /tmp/lbb-backend-source.tgz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/lbb-backend-source.tgz"
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" "sudo tar -xzf /tmp/lbb-backend-source.tgz -C '$DEPLOY_PATH'; cd '$DEPLOY_PATH/backend'; sudo docker compose -f compose.cloud.yml up -d --build api; curl -fsS http://127.0.0.1:8080/healthz"
+
+      - name: Verify public API
+        if: needs.determine-target.outputs.deploy_backend == 'true'
+        run: curl --fail --show-error --retry 5 --retry-delay 3 https://mall.lebb.chat/api/v1/health
