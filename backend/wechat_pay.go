@@ -540,18 +540,18 @@ func (a *app) releaseExpiredWechatPaymentReservations(ctx context.Context, packa
 	if err != nil {
 		return err
 	}
-	stockReleases := map[string]int{}
+	type expiredReservation struct {
+		orderID   string
+		packageID string
+	}
+	reservations := []expiredReservation{}
 	for rows.Next() {
 		var orderID, expiredPackageID string
 		if err = rows.Scan(&orderID, &expiredPackageID); err != nil {
 			rows.Close()
 			return err
 		}
-		stockReleases[expiredPackageID]++
-		if err = recordOrderEvent(ctx, tx, orderID, "money", "payment_expired", "支付超时关闭", "超过15分钟未支付，库存已释放"); err != nil {
-			rows.Close()
-			return err
-		}
+		reservations = append(reservations, expiredReservation{orderID: orderID, packageID: expiredPackageID})
 	}
 	if err = rows.Err(); err != nil {
 		rows.Close()
@@ -559,6 +559,13 @@ func (a *app) releaseExpiredWechatPaymentReservations(ctx context.Context, packa
 	}
 	if err = rows.Close(); err != nil {
 		return err
+	}
+	stockReleases := map[string]int{}
+	for _, reservation := range reservations {
+		stockReleases[reservation.packageID]++
+		if err = recordOrderEvent(ctx, tx, reservation.orderID, "money", "payment_expired", "支付超时关闭", "超过15分钟未支付，库存已释放"); err != nil {
+			return err
+		}
 	}
 	for expiredPackageID, quantity := range stockReleases {
 		if _, err = tx.ExecContext(ctx, `UPDATE packages SET stock=stock+$1, updated_at=NOW() WHERE id=$2 AND stock>=0`, quantity, expiredPackageID); err != nil {
