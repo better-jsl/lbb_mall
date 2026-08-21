@@ -7,13 +7,24 @@ services:
       WECHAT_APP_ID: ${WECHAT_APP_ID}
       WECHAT_APP_SECRET: ${WECHAT_APP_SECRET}
       AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET}
+      WECHAT_PAY_ENABLED: ${WECHAT_PAY_ENABLED:-false}
+      WECHAT_PAY_MCH_ID: ${WECHAT_PAY_MCH_ID}
+      WECHAT_PAY_API_V3_KEY: ${WECHAT_PAY_API_V3_KEY}
+      WECHAT_PAY_PRIVATE_KEY_PATH: /app/secrets/apiclient_key.pem
+      WECHAT_PAY_MCH_SERIAL_NO: ${WECHAT_PAY_MCH_SERIAL_NO}
+      WECHAT_PAY_NOTIFY_URL: ${WECHAT_PAY_NOTIFY_URL}
+      WECHAT_PAY_PLATFORM_CERT_PATH: /app/secrets/wechatpay_platform_cert.pem
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./secrets:/app/secrets:ro
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB: lbb_mall
       POSTGRES_USER: lbb
@@ -25,6 +36,7 @@ services:
       retries: 10
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
 
 volumes:
   postgres_data:

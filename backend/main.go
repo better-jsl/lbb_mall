@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"encoding/json"
@@ -21,7 +22,10 @@ import (
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
-type app struct{ db *sql.DB }
+type app struct {
+	db        *sql.DB
+	wechatPay *wechatPayClient
+}
 
 type pageRequest struct {
 	enabled bool
@@ -57,6 +61,14 @@ func respondPage(w http.ResponseWriter, page pageRequest, items []map[string]any
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--download-wechat-pay-platform-cert" {
+		if err := newWechatPayClient().downloadPlatformCertificate(context.Background()); err != nil {
+			log.Fatal(err)
+		}
+		log.Println("微信支付平台证书已下载")
+		return
+	}
+
 	dbURL := databaseURL()
 	orm, err := gorm.Open(postgres.Open(dbURL), &gorm.Config{})
 	if err != nil {
@@ -73,7 +85,15 @@ func main() {
 		log.Fatalf("migrate PostgreSQL: %v", err)
 	}
 
-	api := &app{db: db}
+	api := &app{db: db, wechatPay: newWechatPayClient()}
+	if err := api.expireOrders(context.Background()); err != nil {
+		log.Printf("expire orders at startup: %v", err)
+	}
+	if err := api.reconcileRefunds(context.Background()); err != nil {
+		log.Printf("reconcile refunds at startup: %v", err)
+	}
+	go api.expireOrdersLoop()
+	go api.reconcileRefundsLoop()
 	server := &http.Server{Addr: ":" + env("PORT", "8080"), Handler: api.routes(), ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("API listening on http://127.0.0.1%s", server.Addr)
 	log.Fatal(server.ListenAndServe())
@@ -82,6 +102,7 @@ func main() {
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", a.health)
+	mux.HandleFunc("GET /api/v1/health", a.health)
 	mux.HandleFunc("POST /api/v1/auth/wechat/login", a.wechatLogin)
 	mux.HandleFunc("POST /api/v1/auth/phone/login", a.phoneLogin)
 	mux.HandleFunc("POST /api/v1/auth/wechat/avatar", a.requireAuth(a.uploadWechatAvatar))
@@ -92,7 +113,9 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/packages/{id}", a.packageDetail)
 	mux.HandleFunc("GET /api/v1/orders", a.requireAuth(a.orders))
 	mux.HandleFunc("GET /api/v1/orders/{id}", a.requireAuth(a.orderDetail))
-	mux.HandleFunc("POST /api/v1/orders", a.requireAuth(a.createOrder))
+	mux.HandleFunc("POST /api/v1/orders/{id}/cancel", a.requireAuth(a.cancelOrder))
+	mux.HandleFunc("POST /api/v1/payments/wechat/jsapi", a.requireAuth(a.createWechatPayment))
+	mux.HandleFunc("POST /api/v1/payments/wechat/notify", a.handleWechatPaymentNotify)
 	mux.HandleFunc("POST /api/v1/orders/verify", a.requireAuth(a.verifyOrder))
 	mux.HandleFunc("GET /api/v1/me/summary", a.requireAuth(a.summary))
 	mux.HandleFunc("GET /api/v1/me/daily-check-in", a.requireAuth(a.dailyCheckInStatus))
@@ -111,6 +134,8 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/daily-tasks/{id}/complete", a.requireAuth(a.completeDailyTask))
 	mux.HandleFunc("GET /api/v1/games", a.requireAuth(a.games))
 	mux.HandleFunc("POST /api/v1/games/{id}/play", a.requireAuth(a.playGame))
+	mux.HandleFunc("GET /api/v1/games/{id}/reward-config", a.requireAuth(a.gameRewardConfig))
+	mux.HandleFunc("POST /api/v1/games/{id}/reward", a.requireAuth(a.grantGameReward))
 	mux.HandleFunc("GET /api/v1/coupons", a.requireAuth(a.coupons))
 	mux.HandleFunc("GET /api/v1/admin/merchants", a.adminMerchants)
 	mux.HandleFunc("POST /api/v1/admin/merchants", a.createAdminMerchant)
@@ -167,8 +192,14 @@ func (a *app) merchantPackages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) packages(w http.ResponseWriter, r *http.Request, merchantID string) {
+	if err := a.releaseExpiredWechatPaymentReservations(r.Context(), ""); err != nil {
+		serverError(w, err)
+		return
+	}
 	page := parsePageRequest(r)
-	query := `SELECT id, title, price::text, points::text, tag, gifts, tone, COALESCE(cover_image, '') FROM packages WHERE merchant_id = $1 ORDER BY sort_order`
+	query := `SELECT id, title, price::text, points::text, tag, gifts, tone, COALESCE(cover_image, ''), stock, purchase_limit, validity_days
+		FROM packages WHERE merchant_id = $1 AND active = TRUE AND stock <> 0
+		AND (sell_start IS NULL OR sell_start <= NOW()) AND (sell_end IS NULL OR sell_end >= NOW()) ORDER BY sort_order`
 	args := []any{merchantID}
 	if page.enabled {
 		query += ` LIMIT $2 OFFSET $3`
@@ -188,21 +219,31 @@ func (a *app) packages(w http.ResponseWriter, r *http.Request, merchantID string
 			break
 		}
 		var id, title, price, points, tag, giftsRaw, tone, coverImage string
-		if err := rows.Scan(&id, &title, &price, &points, &tag, &giftsRaw, &tone, &coverImage); err != nil {
+		var stock, purchaseLimit, validityDays int
+		if err := rows.Scan(&id, &title, &price, &points, &tag, &giftsRaw, &tone, &coverImage, &stock, &purchaseLimit, &validityDays); err != nil {
 			serverError(w, err)
 			return
 		}
 		var gifts []string
 		_ = json.Unmarshal([]byte(giftsRaw), &gifts)
 		coverImage = publicImageURL(r, coverImage)
-		out = append(out, map[string]any{"id": id, "title": title, "price": price, "points": points, "tag": tag, "gifts": gifts, "tone": tone, "coverImage": coverImage})
+		out = append(out, map[string]any{"id": id, "title": title, "price": price, "points": points, "tag": tag, "gifts": gifts, "tone": tone, "coverImage": coverImage, "stock": stock, "purchaseLimit": purchaseLimit, "validityDays": validityDays})
 	}
 	respondPage(w, page, out, hasMore)
 }
 
 func (a *app) packageDetail(w http.ResponseWriter, r *http.Request) {
-	var title, price, points, contentsRaw, noticesRaw, coverImage, imagesRaw string
-	err := a.db.QueryRowContext(r.Context(), `SELECT title, price::text, points::text, contents, notices, COALESCE(cover_image, ''), COALESCE(package_images, '[]'::jsonb)::text FROM packages WHERE id = $1`, r.PathValue("id")).Scan(&title, &price, &points, &contentsRaw, &noticesRaw, &coverImage, &imagesRaw)
+	if err := a.releaseExpiredWechatPaymentReservations(r.Context(), r.PathValue("id")); err != nil {
+		serverError(w, err)
+		return
+	}
+	var title, price, points, contentsRaw, noticesRaw, coverImage, imagesRaw, merchantName, merchantSubtitle, merchantLocation, merchantPhone string
+	var active bool
+	var stock, purchaseLimit, validityDays int
+	var sellStart, sellEnd sql.NullTime
+	err := a.db.QueryRowContext(r.Context(), `SELECT p.title, p.price::text, p.points::text, p.contents, p.notices, COALESCE(p.cover_image, ''), COALESCE(p.package_images, '[]'::jsonb)::text,
+		m.name, COALESCE(m.subtitle, ''), COALESCE(m.location, ''), COALESCE(m.phone, ''), p.active, p.stock, p.sell_start, p.sell_end, p.purchase_limit, p.validity_days
+		FROM packages p JOIN merchants m ON m.id = p.merchant_id WHERE p.id = $1`, r.PathValue("id")).Scan(&title, &price, &points, &contentsRaw, &noticesRaw, &coverImage, &imagesRaw, &merchantName, &merchantSubtitle, &merchantLocation, &merchantPhone, &active, &stock, &sellStart, &sellEnd, &purchaseLimit, &validityDays)
 	if err == sql.ErrNoRows {
 		respond(w, http.StatusNotFound, map[string]string{"message": "package not found"})
 		return
@@ -220,14 +261,26 @@ func (a *app) packageDetail(w http.ResponseWriter, r *http.Request) {
 	for index, image := range images {
 		images[index] = publicImageURL(r, image)
 	}
-	respond(w, http.StatusOK, map[string]any{"id": r.PathValue("id"), "title": title, "price": price, "points": points, "contents": contents, "notices": notices, "coverImage": coverImage, "images": images})
+	var sellStartValue, sellEndValue *time.Time
+	if sellStart.Valid {
+		sellStartValue = &sellStart.Time
+	}
+	if sellEnd.Valid {
+		sellEndValue = &sellEnd.Time
+	}
+	unavailableReason := packageUnavailableReason(active, stock, sellStartValue, sellEndValue, time.Now())
+	respond(w, http.StatusOK, map[string]any{"id": r.PathValue("id"), "title": title, "price": price, "points": points, "contents": contents, "notices": notices, "coverImage": coverImage, "images": images, "merchantName": merchantName, "merchantSubtitle": merchantSubtitle, "merchantLocation": merchantLocation, "merchantPhone": merchantPhone, "stock": stock, "sellStart": sellStartValue, "sellEnd": sellEndValue, "purchaseLimit": purchaseLimit, "validityDays": validityDays, "available": unavailableReason == "", "unavailableReason": unavailableReason})
 }
 
 func (a *app) orders(w http.ResponseWriter, r *http.Request) {
+	if err := a.expireOrders(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
 	state := r.URL.Query().Get("status")
 	page := parsePageRequest(r)
 	query := `SELECT id,title,merchant,price,status,is_redemption,image FROM (
-		SELECT o.id,p.title,m.name AS merchant,p.price::text AS price,o.status,FALSE AS is_redemption,COALESCE(p.cover_image,'') AS image,o.created_at FROM orders o JOIN packages p ON p.id=o.package_id JOIN merchants m ON m.id=p.merchant_id WHERE o.user_id=$1
+		SELECT o.id,p.title,m.name AS merchant,p.price::text AS price,o.status,FALSE AS is_redemption,COALESCE(p.cover_image,'') AS image,o.created_at FROM orders o JOIN packages p ON p.id=o.package_id JOIN merchants m ON m.id=p.merchant_id WHERE o.user_id=$1 AND o.payment_status='paid'
 		UNION ALL
 		SELECT pr.id,pp.title,'积分商城' AS merchant,pr.points_cost::text AS price,pr.status,TRUE AS is_redemption,COALESCE(pp.image,'') AS image,pr.created_at FROM points_redemptions pr JOIN points_products pp ON pp.id=pr.product_id WHERE pr.user_id=$1
 	) records WHERE ($2='' OR status=$2) ORDER BY created_at DESC`
@@ -265,8 +318,13 @@ func (a *app) orders(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) orderDetail(w http.ResponseWriter, r *http.Request) {
-	var id, title, merchant, price, status, orderNo, contentsRaw, createdAt string
-	err := a.db.QueryRowContext(r.Context(), `SELECT o.id,p.title,m.name,p.price::text,o.status,o.order_no,p.contents,o.created_at::text FROM orders o JOIN packages p ON p.id=o.package_id JOIN merchants m ON m.id=p.merchant_id WHERE o.id=$1 AND o.user_id=$2`, r.PathValue("id"), requestUserID(r)).Scan(&id, &title, &merchant, &price, &status, &orderNo, &contentsRaw, &createdAt)
+	if err := a.expireOrders(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
+	var id, title, merchant, price, status, orderNo, contentsRaw, createdAt, refundStatus string
+	var expiresAt sql.NullString
+	err := a.db.QueryRowContext(r.Context(), `SELECT o.id,p.title,m.name,p.price::text,o.status,o.order_no,p.contents,o.created_at::text,o.expires_at::text,o.refund_status FROM orders o JOIN packages p ON p.id=o.package_id JOIN merchants m ON m.id=p.merchant_id WHERE o.id=$1 AND o.user_id=$2 AND o.payment_status='paid'`, r.PathValue("id"), requestUserID(r)).Scan(&id, &title, &merchant, &price, &status, &orderNo, &contentsRaw, &createdAt, &expiresAt, &refundStatus)
 	if err == sql.ErrNoRows {
 		a.pointsRedemptionOrderDetail(w, r)
 		return
@@ -281,34 +339,34 @@ func (a *app) orderDetail(w http.ResponseWriter, r *http.Request) {
 	_ = a.db.QueryRowContext(r.Context(), `SELECT points::text FROM packages p JOIN orders o ON o.package_id=p.id WHERE o.id=$1`, id).Scan(&points)
 	contents = append(contents, map[string]any{"name": "赠送积分", "count": points, "isPoints": true})
 	icon, note := statusPresentation(status)
-	respond(w, http.StatusOK, map[string]any{"id": id, "title": title, "merchant": merchant, "price": price, "priceText": "¥" + price, "status": statusText(status), "state": status, "statusIcon": icon, "statusNote": note, "canUsePoints": status == "verified", "canVerify": status == "pending", "sectionTitle": "套餐信息", "contents": contents, "orderNo": orderNo, "createdAt": createdAt[:16]})
-}
-
-func (a *app) createOrder(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		PackageID string `json:"packageId"`
+	expiresAtText := ""
+	if expiresAt.Valid {
+		expiresAtText = shortTimestamp(expiresAt.String)
+		if status == "pending" {
+			note = "请在 " + expiresAtText + " 前到店使用"
+		}
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.PackageID == "" {
-		respond(w, http.StatusBadRequest, map[string]string{"message": "packageId is required"})
-		return
-	}
-	id := fmt.Sprintf("order-%d", time.Now().UnixNano())
-	orderNo := fmt.Sprintf("LBB%d", time.Now().Unix())
-	if _, err := a.db.ExecContext(r.Context(), `INSERT INTO orders(id,package_id,user_id,order_no,status) VALUES($1,$2,$3,$4,'pending')`, id, body.PackageID, requestUserID(r), orderNo); err != nil {
-		serverError(w, err)
-		return
-	}
-	respond(w, http.StatusCreated, map[string]string{"id": id})
+	respond(w, http.StatusOK, map[string]any{"id": id, "title": title, "merchant": merchant, "price": price, "priceText": "¥" + price, "status": statusText(status), "state": status, "statusIcon": icon, "statusNote": note, "canUsePoints": status == "verified", "canVerify": status == "pending", "canCancel": status == "pending" && (refundStatus == "none" || refundStatus == "failed"), "refundStatus": refundStatus, "sectionTitle": "套餐信息", "contents": contents, "orderNo": orderNo, "createdAt": shortTimestamp(createdAt), "expiresAt": expiresAtText})
 }
 
 func (a *app) verifyOrder(w http.ResponseWriter, r *http.Request) {
+	if err := a.expireOrders(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
 	var body struct {
 		Code    string `json:"code"`
 		OrderID string `json:"orderId"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	tx, err := a.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer tx.Rollback()
 	var id string
-	err := a.db.QueryRowContext(r.Context(), `SELECT id FROM orders WHERE status='pending' AND user_id=$2 AND ($1 = '' OR id = $1) ORDER BY created_at LIMIT 1`, body.OrderID, requestUserID(r)).Scan(&id)
+	err = tx.QueryRowContext(r.Context(), `SELECT id FROM orders WHERE status='pending' AND payment_status='paid' AND (expires_at IS NULL OR expires_at > NOW()) AND user_id=$2 AND ($1 = '' OR id = $1) ORDER BY created_at LIMIT 1 FOR UPDATE`, body.OrderID, requestUserID(r)).Scan(&id)
 	if err == sql.ErrNoRows {
 		respond(w, http.StatusNotFound, map[string]string{"message": "no pending order"})
 		return
@@ -317,7 +375,15 @@ func (a *app) verifyOrder(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	if _, err = a.db.ExecContext(r.Context(), `UPDATE orders SET status='verified', verified_at=NOW() WHERE id=$1`, id); err != nil {
+	if _, err = tx.ExecContext(r.Context(), `UPDATE orders SET status='verified', verified_at=NOW() WHERE id=$1`, id); err != nil {
+		serverError(w, err)
+		return
+	}
+	if err = recordOrderEvent(r.Context(), tx, id, "money", "order_verified", "订单已核销", "套餐已完成使用"); err != nil {
+		serverError(w, err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -535,10 +601,10 @@ func migrate(db *gorm.DB) error {
 		return err
 	}
 	if err := db.AutoMigrate(
-		&Merchant{}, &Package{}, &Order{}, &Profile{}, &DailyCheckIn{}, &UserAddress{},
+		&Merchant{}, &Package{}, &Order{}, &OrderEvent{}, &Profile{}, &DailyCheckIn{}, &UserAddress{},
 		&PointRecord{}, &Coupon{}, &PointsCategory{}, &PointsProduct{}, &PointsRedemption{},
 		&BenefitItem{}, &BenefitNotice{}, &BenefitPromo{}, &DailyTask{}, &DailyTaskCompletion{},
-		&Game{}, &GamePlay{},
+		&Game{}, &GamePlay{}, &GameReward{},
 	); err != nil {
 		return err
 	}
@@ -546,7 +612,7 @@ func migrate(db *gorm.DB) error {
 	if err != nil {
 		return err
 	}
-	for _, name := range []string{"migrations/001_init.sql", "migrations/002_leaderboard_profiles.sql", "migrations/003_business_api.sql"} {
+	for _, name := range []string{"migrations/001_init.sql", "migrations/002_leaderboard_profiles.sql", "migrations/003_business_api.sql", "migrations/004_rewarded_ads.sql", "migrations/005_game_category.sql", "migrations/006_wechat_pay.sql", "migrations/007_merchant_phone.sql", "migrations/008_package_sale_controls.sql", "migrations/009_package_validity.sql", "migrations/010_wechat_refunds.sql", "migrations/011_order_events.sql"} {
 		b, err := migrationFS.ReadFile(name)
 		if err != nil {
 			return err
@@ -580,16 +646,25 @@ func databaseURL() string {
 
 func publicImageURL(r *http.Request, raw string) string {
 	parsed, err := url.Parse(raw)
-	if err != nil || (parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "localhost") || r.Host == "" {
+	if err != nil || r.Host == "" {
+		return raw
+	}
+	if parsed.IsAbs() && parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "localhost" {
+		return raw
+	}
+	if !parsed.IsAbs() && !strings.HasPrefix(parsed.Path, "/uploads/") {
 		return raw
 	}
 	parsed.Scheme = "http"
+	if r.Header.Get("X-Forwarded-Proto") == "https" {
+		parsed.Scheme = "https"
+	}
 	parsed.Host = r.Host
 	return parsed.String()
 }
 
 func statusText(state string) string {
-	return map[string]string{"pending": "待核销", "verified": "已核销", "expired": "已失效"}[state]
+	return map[string]string{"pending": "待核销", "verified": "已核销", "expired": "已失效", "refunding": "退款中", "refunded": "已退款"}[state]
 }
 func statusPresentation(state string) (string, string) {
 	if state == "verified" {
@@ -597,6 +672,12 @@ func statusPresentation(state string) (string, string) {
 	}
 	if state == "expired" {
 		return "close-circle", "该订单已超过有效期"
+	}
+	if state == "refunding" {
+		return "time", "退款申请已提交，请等待微信处理"
+	}
+	if state == "refunded" {
+		return "check-circle", "退款已原路退回微信账户"
 	}
 	return "time", "请在有效期内到店使用"
 }

@@ -4,3 +4,6 @@ node_modules/
 .go-cache/
 lbb-mall-api.exe
 backend/.env
+admin/.env.local
+backend/secrets/
+backend/www/

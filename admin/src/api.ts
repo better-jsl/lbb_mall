@@ -11,6 +11,12 @@ export type AdminPackage = {
   gifts: string[]
   images: string[]
   notices: string[]
+  active: boolean
+  stock: number
+  sellStart: string | null
+  sellEnd: string | null
+  purchaseLimit: number
+  validityDays: number
   sortOrder: number
 }
 
@@ -20,6 +26,7 @@ export type Merchant = {
   subtitle: string
   pinyin: string
   location: string
+  phone: string
   sortOrder: number
   packages: AdminPackage[]
 }
@@ -45,6 +52,8 @@ export type Order = {
   paymentType: 'money' | 'points'
 }
 
+export type OrderEvent = { type: string; title: string; detail: string; occurredAt: string }
+
 export type AdminOrderDetail = Order & {
   merchantName: string
   packageTitle: string
@@ -54,13 +63,16 @@ export type AdminOrderDetail = Order & {
   gifts: string[]
   images: string[]
   notices: string[]
+  expiresAt: string
+  events: OrderEvent[]
 }
 
 export type ListResult<T> = { items: T[]; total: number; page: number; size: number }
 
 export type PointsCategory = { id: string; label: string; emoji: string; image: string }
 export type PointsMallItem = { id: string; category: string; title: string; description: string; redemptionMethod: string; value: number; image: string; emoji: string; points: number }
-export type AdminGame = { id: string; image: string; title: string; description: string; link: string; active: boolean }
+export type GameCategory = 'drinking' | 'multiplayer' | 'single'
+export type AdminGame = { id: string; image: string; title: string; description: string; link: string; rewardPoints: number; active: boolean; category: GameCategory }
 export type ChartItem = { label: string; value: number }
 export type DashboardData = { incomeSources: ChartItem[]; incomeTrend: ChartItem[]; merchantIncome: ChartItem[] }
 export type PointsCatalog = { categories: PointsCategory[]; items: PointsMallItem[] }

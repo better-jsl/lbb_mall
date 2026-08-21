@@ -21,7 +21,7 @@ type pointsProductInput struct {
 }
 
 func (a *app) pointsCategories(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(r.Context(), `SELECT id, label, emoji FROM points_categories WHERE active = TRUE ORDER BY sort_order, created_at`)
+	rows, err := a.db.QueryContext(r.Context(), `SELECT id, label, emoji, COALESCE(image, '') FROM points_categories WHERE active = TRUE ORDER BY sort_order, created_at`)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -29,12 +29,12 @@ func (a *app) pointsCategories(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-		var id, label, emoji string
-		if err := rows.Scan(&id, &label, &emoji); err != nil {
+		var id, label, emoji, image string
+		if err := rows.Scan(&id, &label, &emoji, &image); err != nil {
 			serverError(w, err)
 			return
 		}
-		items = append(items, map[string]any{"id": id, "label": label, "emoji": emoji})
+		items = append(items, map[string]any{"id": id, "label": label, "emoji": emoji, "image": publicImageURL(r, image)})
 	}
 	respond(w, http.StatusOK, items)
 }
@@ -159,6 +159,10 @@ func (a *app) redeemPointsProduct(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
+	if err = recordOrderEvent(r.Context(), tx, redemptionID, "points", "points_redeemed", "积分兑换成功", fmt.Sprintf("扣除%d积分", cost)); err != nil {
+		serverError(w, err)
+		return
+	}
 	if err = tx.Commit(); err != nil {
 		serverError(w, err)
 		return
@@ -191,18 +195,29 @@ func (a *app) claimAppVoucher(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := a.db.ExecContext(r.Context(), `UPDATE points_redemptions pr SET app_phone=$1, updated_at=NOW() FROM points_products pp WHERE pr.product_id=pp.id AND pr.id=$2 AND pr.user_id=$3 AND LOWER(BTRIM(pp.redemption_method))=LOWER('APP抵用券') AND COALESCE(pr.app_phone,'')=''`, phone, r.PathValue("id"), requestUserID(r))
+	tx, err := a.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	updated, err := result.RowsAffected()
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	if updated == 0 {
+	defer tx.Rollback()
+
+	var redemptionID string
+	err = tx.QueryRowContext(r.Context(), `UPDATE points_redemptions pr SET app_phone=$1, updated_at=NOW() FROM points_products pp WHERE pr.product_id=pp.id AND pr.id=$2 AND pr.user_id=$3 AND LOWER(BTRIM(pp.redemption_method))=LOWER('APP抵用券') AND COALESCE(pr.app_phone,'')='' RETURNING pr.id`, phone, r.PathValue("id"), requestUserID(r)).Scan(&redemptionID)
+	if err == sql.ErrNoRows {
 		badRequest(w, "该抵用券无法重复领取")
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if err = recordOrderEvent(r.Context(), tx, redemptionID, "points", "app_voucher_claimed", "抵用券领取信息已提交", "已填写乐伴伴 App 登录手机号"); err != nil {
+		serverError(w, err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		serverError(w, err)
 		return
 	}
 	respond(w, http.StatusOK, map[string]string{"message": "领取信息已提交"})
@@ -482,6 +497,115 @@ func (a *app) playGame(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusCreated, map[string]any{"reward": reward, "points": points, "remaining": dailyLimit - played - 1})
 }
 
+func (a *app) gameRewardConfig(w http.ResponseWriter, r *http.Request) {
+	var gameID, title string
+	var rewardPoints int
+	err := a.db.QueryRowContext(r.Context(), `SELECT id,title,reward_points FROM games WHERE id=$1 AND active=TRUE`, r.PathValue("id")).Scan(&gameID, &title, &rewardPoints)
+	if err == sql.ErrNoRows {
+		notFound(w)
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	respond(w, http.StatusOK, map[string]any{"gameId": gameID, "title": title, "rewardPoints": rewardPoints})
+}
+
+func (a *app) grantGameReward(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		RequestID string `json:"requestId"`
+	}
+	if !readJSON(w, r, &input) {
+		return
+	}
+	input.RequestID = strings.TrimSpace(input.RequestID)
+	if !validGameRewardRequestID(input.RequestID) {
+		badRequest(w, "奖励请求标识无效")
+		return
+	}
+
+	userID := requestUserID(r)
+	tx, err := a.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(r.Context(), `SELECT pg_advisory_xact_lock(hashtext($1))`, userID+":"+input.RequestID); err != nil {
+		serverError(w, err)
+		return
+	}
+
+	var existingGameID string
+	var existingPoints int
+	err = tx.QueryRowContext(r.Context(), `SELECT game_id,points FROM game_rewards WHERE user_id=$1 AND request_id=$2`, userID, input.RequestID).Scan(&existingGameID, &existingPoints)
+	if err == nil {
+		if existingGameID != r.PathValue("id") {
+			respond(w, http.StatusConflict, map[string]string{"message": "奖励请求标识已用于其他游戏"})
+			return
+		}
+		var balance int
+		if err = tx.QueryRowContext(r.Context(), `SELECT points FROM profile WHERE id=$1`, userID).Scan(&balance); err != nil {
+			serverError(w, err)
+			return
+		}
+		respond(w, http.StatusOK, map[string]any{"awarded": false, "reward": existingPoints, "points": balance})
+		return
+	}
+	if err != sql.ErrNoRows {
+		serverError(w, err)
+		return
+	}
+	if !strings.HasPrefix(input.RequestID, r.PathValue("id")+"-") {
+		badRequest(w, "奖励请求标识与游戏不匹配")
+		return
+	}
+
+	var title string
+	var rewardPoints int
+	err = tx.QueryRowContext(r.Context(), `SELECT title,reward_points FROM games WHERE id=$1 AND active=TRUE FOR UPDATE`, r.PathValue("id")).Scan(&title, &rewardPoints)
+	if err == sql.ErrNoRows {
+		notFound(w)
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if rewardPoints < 0 {
+		rewardPoints = 0
+	}
+	if _, err = tx.ExecContext(r.Context(), `INSERT INTO game_rewards(id,user_id,game_id,request_id,points,created_at,updated_at) VALUES($1,$2,$3,$4,$5,NOW(),NOW())`, newID("game-reward"), userID, r.PathValue("id"), input.RequestID, rewardPoints); err != nil {
+		serverError(w, err)
+		return
+	}
+	if rewardPoints > 0 {
+		if _, err = tx.ExecContext(r.Context(), `UPDATE profile SET points=points+$1,updated_at=NOW() WHERE id=$2`, rewardPoints, userID); err != nil {
+			serverError(w, err)
+			return
+		}
+		if _, err = tx.ExecContext(r.Context(), `INSERT INTO point_records(id,user_id,title,occurred_at,change,created_at,updated_at) VALUES($1,$2,$3,NOW(),$4,NOW(),NOW())`, newID("point"), userID, "广告奖励："+title, rewardPoints); err != nil {
+			serverError(w, err)
+			return
+		}
+	}
+	var balance int
+	if err = tx.QueryRowContext(r.Context(), `SELECT points FROM profile WHERE id=$1`, userID).Scan(&balance); err != nil {
+		serverError(w, err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		serverError(w, err)
+		return
+	}
+	respond(w, http.StatusCreated, map[string]any{"awarded": true, "reward": rewardPoints, "points": balance})
+}
+
+func validGameRewardRequestID(requestID string) bool {
+	return regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`).MatchString(requestID)
+}
+
 func (a *app) adminPointsCatalog(w http.ResponseWriter, r *http.Request) {
 	categoryRows, err := a.db.QueryContext(r.Context(), `SELECT id,label,emoji,COALESCE(image,'') FROM points_categories ORDER BY sort_order,created_at`)
 	if err != nil {
@@ -496,7 +620,7 @@ func (a *app) adminPointsCatalog(w http.ResponseWriter, r *http.Request) {
 			serverError(w, err)
 			return
 		}
-		categories = append(categories, map[string]any{"id": id, "label": label, "emoji": emoji, "image": image})
+		categories = append(categories, map[string]any{"id": id, "label": label, "emoji": emoji, "image": publicImageURL(r, image)})
 	}
 	productRows, err := a.db.QueryContext(r.Context(), `SELECT id,category_id,title,description,redemption_method,value,COALESCE(image,''),emoji,points FROM points_products ORDER BY category_id,sort_order,created_at`)
 	if err != nil {
@@ -513,13 +637,22 @@ func (a *app) adminPointsCatalog(w http.ResponseWriter, r *http.Request) {
 			serverError(w, err)
 			return
 		}
-		products = append(products, map[string]any{"id": id, "category": category, "title": title, "description": description, "redemptionMethod": method, "value": value, "image": image, "emoji": emoji, "points": points})
+		products = append(products, map[string]any{"id": id, "category": category, "title": title, "description": description, "redemptionMethod": method, "value": value, "image": publicImageURL(r, image), "emoji": emoji, "points": points})
 	}
 	respond(w, http.StatusOK, map[string]any{"categories": categories, "items": products})
 }
 
+func gameCategory(value string) string {
+	switch value {
+	case "multiplayer", "single":
+		return value
+	default:
+		return "drinking"
+	}
+}
+
 func (a *app) adminGames(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(r.Context(), `SELECT id,COALESCE(image,''),title,description,COALESCE(link,''),active FROM games ORDER BY sort_order,created_at`)
+	rows, err := a.db.QueryContext(r.Context(), `SELECT id,COALESCE(image,''),title,description,COALESCE(link,''),reward_points,active,category FROM games ORDER BY sort_order,created_at`)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -527,24 +660,27 @@ func (a *app) adminGames(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	items := []map[string]any{}
 	for rows.Next() {
-		var id, image, title, description, link string
+		var id, image, title, description, link, category string
+		var rewardPoints int
 		var active bool
-		if err := rows.Scan(&id, &image, &title, &description, &link, &active); err != nil {
+		if err := rows.Scan(&id, &image, &title, &description, &link, &rewardPoints, &active, &category); err != nil {
 			serverError(w, err)
 			return
 		}
-		items = append(items, map[string]any{"id": id, "image": image, "title": title, "description": description, "link": link, "active": active})
+		items = append(items, map[string]any{"id": id, "image": publicImageURL(r, image), "title": title, "description": description, "link": link, "rewardPoints": rewardPoints, "active": active, "category": gameCategory(category)})
 	}
 	respond(w, http.StatusOK, items)
 }
 
 func (a *app) updateAdminGame(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Image       *string `json:"image"`
-		Title       *string `json:"title"`
-		Description *string `json:"description"`
-		Link        *string `json:"link"`
-		Active      *bool   `json:"active"`
+		Image        *string `json:"image"`
+		Title        *string `json:"title"`
+		Description  *string `json:"description"`
+		Link         *string `json:"link"`
+		RewardPoints *int    `json:"rewardPoints"`
+		Active       *bool   `json:"active"`
+		Category     *string `json:"category"`
 	}
 	if !readJSON(w, r, &input) {
 		return
@@ -562,7 +698,11 @@ func (a *app) updateAdminGame(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "游戏标题不能为空")
 		return
 	}
-	result, err := a.db.ExecContext(r.Context(), `UPDATE games SET image=$1,title=$2,description=$3,link=$4,active=$5,updated_at=NOW() WHERE id=$6`, valueOrEmpty(input.Image), title, valueOrEmpty(input.Description), valueOrEmpty(input.Link), *input.Active, r.PathValue("id"))
+	if input.RewardPoints != nil && *input.RewardPoints < 0 {
+		badRequest(w, "广告奖励积分不能小于 0")
+		return
+	}
+	result, err := a.db.ExecContext(r.Context(), `UPDATE games SET image=$1,title=$2,description=$3,link=$4,reward_points=COALESCE($5,reward_points),active=$6,category=$7,updated_at=NOW() WHERE id=$8`, valueOrEmpty(input.Image), title, valueOrEmpty(input.Description), valueOrEmpty(input.Link), input.RewardPoints, *input.Active, gameCategory(valueOrEmpty(input.Category)), r.PathValue("id"))
 	if err != nil {
 		serverError(w, err)
 		return
@@ -581,11 +721,13 @@ func (a *app) updateAdminGame(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) createAdminGame(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Image       string `json:"image"`
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Link        string `json:"link"`
-		Active      bool   `json:"active"`
+		Image        string `json:"image"`
+		Title        string `json:"title"`
+		Description  string `json:"description"`
+		Link         string `json:"link"`
+		RewardPoints int    `json:"rewardPoints"`
+		Active       bool   `json:"active"`
+		Category     string `json:"category"`
 	}
 	if !readJSON(w, r, &input) {
 		return
@@ -595,13 +737,17 @@ func (a *app) createAdminGame(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "游戏标题不能为空")
 		return
 	}
+	if input.RewardPoints < 0 {
+		badRequest(w, "广告奖励积分不能小于 0")
+		return
+	}
 	var sortOrder int
 	if err := a.db.QueryRowContext(r.Context(), `SELECT COALESCE(MAX(sort_order),0)+1 FROM games`).Scan(&sortOrder); err != nil {
 		serverError(w, err)
 		return
 	}
 	id := newID("game")
-	if _, err := a.db.ExecContext(r.Context(), `INSERT INTO games(id,emoji,image,title,rule,description,link,points,daily_limit,team_size,tone,sort_order,active,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())`, id, "🎮", input.Image, input.Title, "", input.Description, input.Link, 0, 1, 1, "blue", sortOrder, input.Active); err != nil {
+	if _, err := a.db.ExecContext(r.Context(), `INSERT INTO games(id,emoji,image,title,rule,description,link,reward_points,points,daily_limit,team_size,tone,sort_order,active,category,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),NOW())`, id, "🎮", input.Image, input.Title, "", input.Description, input.Link, input.RewardPoints, 0, 1, 1, "blue", sortOrder, input.Active, gameCategory(input.Category)); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -762,7 +908,7 @@ func (a *app) deleteAdminPointsProduct(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) adminDashboard(w http.ResponseWriter, r *http.Request) {
 	var packageIncome, redemptionValue float64
-	if err := a.db.QueryRowContext(r.Context(), `SELECT COALESCE(SUM(p.price),0) FROM orders o JOIN packages p ON p.id=o.package_id WHERE o.status IN ('pending','verified')`).Scan(&packageIncome); err != nil {
+	if err := a.db.QueryRowContext(r.Context(), `SELECT COALESCE(SUM(p.price),0) FROM orders o JOIN packages p ON p.id=o.package_id WHERE o.status IN ('pending','verified') AND o.payment_status='paid'`).Scan(&packageIncome); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -771,7 +917,7 @@ func (a *app) adminDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	incomeSources := []map[string]any{{"label": "套餐销售", "value": packageIncome}, {"label": "积分兑换", "value": redemptionValue}, {"label": "活动服务", "value": 0}}
-	trendRows, err := a.db.QueryContext(r.Context(), `SELECT TO_CHAR(month,'FMMM月'), COALESCE(SUM(p.price),0) FROM generate_series(date_trunc('month',CURRENT_DATE)-INTERVAL '5 months',date_trunc('month',CURRENT_DATE),INTERVAL '1 month') month LEFT JOIN orders o ON date_trunc('month',o.created_at)=month AND o.status IN ('pending','verified') LEFT JOIN packages p ON p.id=o.package_id GROUP BY month ORDER BY month`)
+	trendRows, err := a.db.QueryContext(r.Context(), `SELECT TO_CHAR(month,'FMMM月'), COALESCE(SUM(p.price),0) FROM generate_series(date_trunc('month',CURRENT_DATE)-INTERVAL '5 months',date_trunc('month',CURRENT_DATE),INTERVAL '1 month') month LEFT JOIN orders o ON date_trunc('month',o.created_at)=month AND o.status IN ('pending','verified') AND o.payment_status='paid' LEFT JOIN packages p ON p.id=o.package_id GROUP BY month ORDER BY month`)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -787,7 +933,7 @@ func (a *app) adminDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		incomeTrend = append(incomeTrend, map[string]any{"label": label, "value": value})
 	}
-	merchantRows, err := a.db.QueryContext(r.Context(), `SELECT m.name,COALESCE(SUM(p.price),0) FROM merchants m LEFT JOIN packages p ON p.merchant_id=m.id LEFT JOIN orders o ON o.package_id=p.id AND o.status IN ('pending','verified') GROUP BY m.id,m.name ORDER BY COALESCE(SUM(p.price),0) DESC`)
+	merchantRows, err := a.db.QueryContext(r.Context(), `SELECT m.name,COALESCE(SUM(p.price),0) FROM merchants m LEFT JOIN packages p ON p.merchant_id=m.id LEFT JOIN orders o ON o.package_id=p.id AND o.status IN ('pending','verified') AND o.payment_status='paid' GROUP BY m.id,m.name ORDER BY COALESCE(SUM(p.price),0) DESC`)
 	if err != nil {
 		serverError(w, err)
 		return

@@ -393,6 +393,8 @@ func mergeUserProfiles(ctx context.Context, tx *sql.Tx, sourceID, targetID strin
 		`UPDATE coupons SET user_id=$2 WHERE user_id=$1`,
 		`UPDATE points_redemptions SET user_id=$2 WHERE user_id=$1`,
 		`UPDATE game_plays SET user_id=$2 WHERE user_id=$1`,
+		`DELETE FROM game_rewards AS source USING game_rewards AS target WHERE source.user_id=$1 AND target.user_id=$2 AND source.request_id=target.request_id`,
+		`UPDATE game_rewards SET user_id=$2 WHERE user_id=$1`,
 		`DELETE FROM user_addresses AS source USING user_addresses AS target WHERE source.user_id=$1 AND target.user_id=$2`,
 		`UPDATE user_addresses SET user_id=$2 WHERE user_id=$1`,
 		`DELETE FROM daily_check_ins AS source USING daily_check_ins AS target WHERE source.user_id=$1 AND target.user_id=$2 AND source.check_in_date=target.check_in_date`,

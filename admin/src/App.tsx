@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { ClipboardEvent, FormEvent, KeyboardEvent, MouseEvent, PointerEvent, ReactNode, useEffect, useMemo, useRef, useState, WheelEvent } from 'react'
 import {
   BarChart3,
   ChevronDown,
@@ -23,7 +23,8 @@ import {
   UsersRound,
   X,
 } from 'lucide-react'
-import { AdminGame, AdminOrderDetail, AdminPackage, api, ChartItem, DashboardData, ListResult, Merchant, Order, PackageContent, PointsCatalog, PointsCategory, PointsMallItem, uploadImages, User } from './api'
+import { AdminGame, AdminOrderDetail, AdminPackage, api, ChartItem, DashboardData, GameCategory, ListResult, Merchant, Order, PackageContent, PointsCatalog, PointsCategory, PointsMallItem, uploadImages, User } from './api'
+import { AMapApi, formatCoordinates, loadAMap, MapCoordinates, parseCoordinates } from './amap'
 
 type PageName = 'dashboard' | 'merchants' | 'points-mall' | 'games' | 'users' | 'orders' | 'settings'
 type DragMerchant = { id: string; startIds: string[] }
@@ -39,9 +40,27 @@ const emptyPackage = (merchantId = '') => ({
   gifts: [] as string[],
   images: [] as string[],
   notices: [] as string[],
+  active: true,
+  stock: -1,
+  sellStart: null as string | null,
+  sellEnd: null as string | null,
+  purchaseLimit: 0,
+  validityDays: 30,
 })
 
+function localDateTimeValue(value?: string | null) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+
 const redemptionMethods = ['现场核销', '快递邮寄', 'APP抵用券']
+const gameCategories: Array<{ id: GameCategory; label: string }> = [
+  { id: 'drinking', label: '喝酒游戏' },
+  { id: 'multiplayer', label: '多人游戏' },
+  { id: 'single', label: '单人游戏' },
+]
 
 const chartColors = ['#182743', '#ffb000', '#00bcd4', '#ff4f8b']
 const chartGradients = [
@@ -51,14 +70,20 @@ const chartGradients = [
   ['#ff4f8b', '#8b5cf6'],
 ]
 const adminAuthKey = 'lbb-admin-authenticated'
+const adminBasePath = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '')
+
+function adminPath(path: string) {
+  return `${adminBasePath}${path}`
+}
 
 function currentPage(): PageName {
-  if (window.location.pathname.startsWith('/dashboard')) return 'dashboard'
-  if (window.location.pathname.startsWith('/points-mall')) return 'points-mall'
-  if (window.location.pathname.startsWith('/games')) return 'games'
-  if (window.location.pathname.startsWith('/settings')) return 'settings'
-  if (window.location.pathname.startsWith('/users')) return 'users'
-  if (window.location.pathname.startsWith('/orders')) return 'orders'
+  const path = adminBasePath && window.location.pathname.startsWith(adminBasePath) ? window.location.pathname.slice(adminBasePath.length) || '/' : window.location.pathname
+  if (path.startsWith('/dashboard')) return 'dashboard'
+  if (path.startsWith('/points-mall')) return 'points-mall'
+  if (path.startsWith('/games')) return 'games'
+  if (path.startsWith('/settings')) return 'settings'
+  if (path.startsWith('/users')) return 'users'
+  if (path.startsWith('/orders')) return 'orders'
   return 'merchants'
 }
 
@@ -72,8 +97,39 @@ function sameOrder(left: string[], right: string[]) {
   return left.length === right.length && left.every((id, index) => id === right[index])
 }
 
+function restrictDecimalInput(event: KeyboardEvent<HTMLInputElement>) {
+  if (event.key.length !== 1 || /\d/.test(event.key)) return
+  if (event.key === '.' && !event.currentTarget.value.includes('.')) return
+  event.preventDefault()
+}
+
+function restrictDecimalPaste(event: ClipboardEvent<HTMLInputElement>) {
+  const input = event.currentTarget
+  const start = input.selectionStart || 0
+  const end = input.selectionEnd || start
+  const next = `${input.value.slice(0, start)}${event.clipboardData.getData('text')}${input.value.slice(end)}`
+  if (!/^\d*\.?\d*$/.test(next)) event.preventDefault()
+}
+
+function restrictIntegerInput(event: KeyboardEvent<HTMLInputElement>) {
+  if (event.key.length === 1 && !/\d/.test(event.key)) event.preventDefault()
+}
+
+function restrictIntegerPaste(event: ClipboardEvent<HTMLInputElement>) {
+  if (!/^\d*$/.test(event.clipboardData.getData('text'))) event.preventDefault()
+}
+
+function numericCount(value: string, fallback = '') {
+  return String(value).replace(/\D/g, '') || fallback
+}
+
+function giftRow(value: string): PackageContent {
+  const matched = String(value).match(/^(.*?)(?:\s*[x×]\s*|\s+)(\d+)$/)
+  return matched ? { name: matched[1].trim(), count: matched[2] } : { name: value, count: '1' }
+}
+
 function statusLabel(status: string) {
-  return ({ pending: '待核销', verified: '已核销', expired: '已失效' } as Record<string, string>)[status] || status
+  return ({ pending: '待核销', verified: '已核销', expired: '已失效', refunding: '退款中', refunded: '已退款' } as Record<string, string>)[status] || status
 }
 
 export default function App() {
@@ -97,15 +153,15 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="/merchants"><span>乐伴伴</span> 商城后台</a>
+        <a className="brand" href={adminPath('/merchants')}><span>乐伴伴</span> 商城后台</a>
         <nav aria-label="后台导航">
-          <NavItem active={page === 'dashboard'} href="/dashboard" icon={<BarChart3 size={17} />}>数据看板</NavItem>
-          <NavItem active={page === 'merchants'} href="/merchants" icon={<Store size={17} />}>商家管理</NavItem>
-          <NavItem active={page === 'points-mall'} href="/points-mall" icon={<Gift size={17} />}>积分商城</NavItem>
-          <NavItem active={page === 'games'} href="/games" icon={<Gamepad2 size={17} />}>游戏管理</NavItem>
-          <NavItem active={page === 'orders'} href="/orders" icon={<ShoppingBag size={17} />}>订单管理</NavItem>
-          <NavItem active={page === 'users'} href="/users" icon={<UsersRound size={17} />}>用户管理</NavItem>
-          <NavItem active={page === 'settings'} href="/settings" icon={<Settings size={17} />}>系统设置</NavItem>
+          <NavItem active={page === 'dashboard'} href={adminPath('/dashboard')} icon={<BarChart3 size={17} />}>数据看板</NavItem>
+          <NavItem active={page === 'merchants'} href={adminPath('/merchants')} icon={<Store size={17} />}>商家管理</NavItem>
+          <NavItem active={page === 'points-mall'} href={adminPath('/points-mall')} icon={<Gift size={17} />}>积分商城</NavItem>
+          <NavItem active={page === 'games'} href={adminPath('/games')} icon={<Gamepad2 size={17} />}>游戏管理</NavItem>
+          <NavItem active={page === 'orders'} href={adminPath('/orders')} icon={<ShoppingBag size={17} />}>订单管理</NavItem>
+          <NavItem active={page === 'users'} href={adminPath('/users')} icon={<UsersRound size={17} />}>用户管理</NavItem>
+          <NavItem active={page === 'settings'} href={adminPath('/settings')} icon={<Settings size={17} />}>系统设置</NavItem>
         </nav>
         <div className="operator"><button type="button" onClick={logout}><LogOut size={17} />退出</button></div>
       </header>
@@ -125,6 +181,19 @@ export default function App() {
 function LoginPage({ onLogin }: { onLogin: (username: string, password: string) => boolean }) {
   const [error, setError] = useState('')
 
+  const moveBackground = (event: MouseEvent<HTMLElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const x = (event.clientX - bounds.left) / bounds.width - .5
+    const y = (event.clientY - bounds.top) / bounds.height - .5
+    event.currentTarget.style.setProperty('--login-shift-x', `${x * -72}px`)
+    event.currentTarget.style.setProperty('--login-shift-y', `${y * -52}px`)
+  }
+
+  const resetBackground = (event: MouseEvent<HTMLElement>) => {
+    event.currentTarget.style.setProperty('--login-shift-x', '0px')
+    event.currentTarget.style.setProperty('--login-shift-y', '0px')
+  }
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -134,9 +203,9 @@ function LoginPage({ onLogin }: { onLogin: (username: string, password: string) 
     setError('账号或密码不正确')
   }
 
-  return <main className="login-page">
+  return <main className="login-page" onMouseMove={moveBackground} onMouseLeave={resetBackground}>
     <section className="login-panel">
-      <h1>乐伴伴商城后台</h1>
+      <h1>乐伴伴商家严选 管理平台</h1>
       <form onSubmit={submit} className="login-form">
         <Field label="管理员账号"><input name="username" autoComplete="username" autoFocus required /></Field>
         <Field label="管理员密码"><input name="password" type="password" autoComplete="current-password" required /></Field>
@@ -324,7 +393,7 @@ function MerchantPage() {
           {selectedMerchant.packages.map((item) => <article className={`package-vertical-item${dragPackage?.id === item.id ? ' dragging' : ''}`} key={item.id} draggable onDragStart={() => beginPackageDrag(selectedMerchant.id, item.id)} onDragEnter={() => previewPackageOrder(selectedMerchant.id, item.id)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => event.preventDefault()} onDragEnd={() => void finishPackageDrag()}>
             <span className="drag-handle" title="拖拽排序"><GripVertical size={18} /></span>
             <Thumbnail src={item.coverImage} alt="" />
-            <div className="package-vertical-main"><strong>{item.title}</strong><span>{item.contents.map((content) => `${content.name} ${content.count}`).join('、') || '未设置套餐内容'}</span></div>
+            <div className="package-vertical-main"><div className="package-vertical-title"><strong>{item.title}</strong><small className="package-title-sale-meta">{!item.active ? '已下架 · ' : ''}有效期 {item.validityDays} 天 · {item.stock === 0 ? '已售罄' : item.stock === -1 ? '不限库存' : `库存 ${item.stock}`}</small></div><span>{item.contents.map((content) => `${content.name} ${content.count}`).join('、') || '未设置套餐内容'}</span></div>
             <div className="package-vertical-meta"><span>¥{item.price.toFixed(2)}</span><small>赠送 {item.points} 积分</small></div>
             <div className="row-actions"><IconButton label={`编辑${item.title}`} onClick={() => setPackageDraft({ value: item, merchantId: selectedMerchant.id })}><Edit3 size={17} /></IconButton><IconButton label={`删除${item.title}`} danger onClick={() => void deletePackage(item)}><Trash2 size={17} /></IconButton></div>
           </article>)}
@@ -337,6 +406,8 @@ function MerchantPage() {
 }
 
 function MerchantModal({ value, onClose, onSaved }: { value: Merchant | null; onClose: () => void; onSaved: () => Promise<void> }) {
+  const [location, setLocation] = useState(value?.location || '')
+  const [pickingLocation, setPickingLocation] = useState(false)
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -344,21 +415,58 @@ function MerchantModal({ value, onClose, onSaved }: { value: Merchant | null; on
     try {
       const subtitle = String(form.get('subtitle') || '').trim()
       const location = String(form.get('location') || '').trim()
-      await api(value ? `/merchants/${value.id}` : '/merchants', value ? 'PATCH' : 'POST', { name, subtitle, location })
+      const phone = String(form.get('phone') || '').trim()
+      await api(value ? `/merchants/${value.id}` : '/merchants', value ? 'PATCH' : 'POST', { name, subtitle, location, phone })
       await onSaved(); onClose()
     } catch (error) { alertMessage(error) }
   }
-  return <Modal title={value ? '编辑商家' : '新增商家'} onClose={onClose}><form onSubmit={submit} className="form-grid"><Field label="商家名称"><input name="name" defaultValue={value?.name || ''} autoFocus required /></Field><Field label="次标题"><input name="subtitle" defaultValue={value?.subtitle || ''} placeholder="如：KTV 欢唱空间" /></Field><Field label="位置"><input name="location" defaultValue={value?.location || ''} placeholder="请填写经纬度" /></Field><FormActions onClose={onClose} /></form></Modal>
+  return <><Modal title={value ? '编辑商家' : '新增商家'} onClose={onClose}><form onSubmit={submit} className="form-grid"><Field label="商家名称" required><input name="name" defaultValue={value?.name || ''} autoFocus required /></Field><Field label="次标题"><input name="subtitle" defaultValue={value?.subtitle || ''} placeholder="如：丰泽店" /></Field><Field label="位置" required action={<button type="button" className="quiet-button map-picker-trigger" onClick={() => setPickingLocation(true)}>从地图选取</button>}><input name="location" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="如：118.6599,24.9219" required /></Field><Field label="联系电话" required><input name="phone" type="tel" defaultValue={value?.phone || ''} placeholder="如：0595-12345678" required /></Field><FormActions onClose={onClose} /></form></Modal>{pickingLocation && <LocationPicker initialLocation={location} onClose={() => setPickingLocation(false)} onConfirm={(coordinates) => { setLocation(formatCoordinates(coordinates)); setPickingLocation(false) }} />}</>
+}
+
+const defaultMerchantCoordinates: MapCoordinates = { longitude: 118.675675, latitude: 24.874492 }
+
+function LocationPicker({ initialLocation, onClose, onConfirm }: { initialLocation: string; onClose: () => void; onConfirm: (coordinates: MapCoordinates) => void }) {
+  const mapRef = useRef<HTMLDivElement>(null)
+  const [coordinates, setCoordinates] = useState(() => parseCoordinates(initialLocation) || defaultMerchantCoordinates)
+  const [status, setStatus] = useState('正在加载地图')
+  const [mapReady, setMapReady] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    let map: InstanceType<AMapApi['Map']> | null = null
+    let marker: InstanceType<AMapApi['Marker']> | null = null
+
+    void loadAMap().then((AMap) => {
+      if (cancelled || !mapRef.current) return
+      map = new AMap.Map(mapRef.current, { zoom: 15, center: [coordinates.longitude, coordinates.latitude] })
+      marker = new AMap.Marker({ position: [coordinates.longitude, coordinates.latitude] })
+      map.add(marker)
+      map.on('click', (event) => {
+        const next = { longitude: event.lnglat.getLng(), latitude: event.lnglat.getLat() }
+        marker?.setPosition([next.longitude, next.latitude])
+        setCoordinates(next)
+      })
+      setStatus('点击地图选择位置')
+      setMapReady(true)
+    }).catch((error: unknown) => {
+      if (!cancelled) setStatus(error instanceof Error ? error.message : '高德地图加载失败')
+    })
+
+    return () => { cancelled = true; map?.destroy() }
+  }, [])
+
+  return <Modal title="从地图选取位置" onClose={onClose} wide><div className="map-picker"><div className="map-picker-canvas" ref={mapRef}><span className="map-picker-status">{status}</span></div><div className="map-picker-coordinate">经度 {coordinates.longitude.toFixed(6)}，纬度 {coordinates.latitude.toFixed(6)}</div><div className="form-actions"><button type="button" className="quiet-button" onClick={onClose}>取消</button><button type="button" className="primary-button" disabled={!mapReady} onClick={() => onConfirm(coordinates)}>确认选点</button></div></div></Modal>
 }
 
 function PackageModal({ merchantId, value, onClose, onSaved }: { merchantId: string; value: Partial<AdminPackage>; onClose: () => void; onSaved: () => Promise<void> }) {
   const [cover, setCover] = useState(value.coverImage || '')
   const [images, setImages] = useState(value.images || [])
-  const [contents, setContents] = useState<PackageContent[]>(value.contents || [])
-  const [gifts, setGifts] = useState<string[]>(value.gifts || [])
+  const [contents, setContents] = useState<PackageContent[]>(() => (value.contents || []).map((item) => ({ ...item, count: numericCount(item.count) })))
+  const [gifts, setGifts] = useState<PackageContent[]>(() => (value.gifts || []).map(giftRow))
   const [notices, setNotices] = useState<string[]>(value.notices || [])
+  const [active, setActive] = useState(value.active ?? true)
   const [uploading, setUploading] = useState(false)
-  const [preview, setPreview] = useState<{ src: string; isCover: boolean } | null>(null)
+  const [preview, setPreview] = useState<{ images: string[]; activeIndex: number; isCover: boolean } | null>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
 
   const upload = async (files: FileList | null, multiple = false) => {
@@ -378,7 +486,12 @@ function PackageModal({ merchantId, value, onClose, onSaved }: { merchantId: str
     const payload = {
       merchantId, title: String(form.get('title') || '').trim(), coverImage: cover,
       price: Number(form.get('price') || 0), points: Number(form.get('points') || 0),
-      contents: contents.filter((item) => item.name.trim()), gifts: gifts.map((item) => item.trim()).filter(Boolean),
+      active, stock: Number(form.get('stock') || 0),
+      sellStart: form.get('sellStart') ? new Date(String(form.get('sellStart'))).toISOString() : null,
+      sellEnd: form.get('sellEnd') ? new Date(String(form.get('sellEnd'))).toISOString() : null,
+      purchaseLimit: Number(form.get('purchaseLimit') || 0),
+      validityDays: Number(form.get('validityDays') || 0),
+      contents: contents.filter((item) => item.name.trim()), gifts: gifts.filter((item) => item.name.trim()).map((item) => `${item.name.trim()} ${item.count || '1'}`),
       images, notices: notices.map((item) => item.trim()).filter(Boolean),
     }
     try {
@@ -387,20 +500,106 @@ function PackageModal({ merchantId, value, onClose, onSaved }: { merchantId: str
     } catch (error) { alertMessage(error) }
   }
   return <><Modal title={value.id ? '编辑套餐' : '新增套餐'} onClose={onClose} wide><form onSubmit={submit} className="form-grid package-form">
-    <Field label="套餐名称" hint="请填写套餐名称" className="package-name"><input name="title" defaultValue={value.title || ''} required /></Field>
-    <Field label="价格" className="package-price"><input name="price" type="number" min="0" step="0.01" defaultValue={value.price ?? 0} required /></Field>
-    <Field label="赠送积分" className="package-points"><input name="points" type="number" min="0" step="1" defaultValue={value.points ?? 0} required /></Field>
-    <Field label="套餐内容" className="package-half" action={<button className="add-row" type="button" onClick={() => setContents((current) => [...current, { name: '', count: '' }])}><Plus size={16} />新增一行</button>}><ContentRows values={contents} onChange={setContents} /></Field>
-    <Field label="赠送内容" className="package-half" action={<button className="add-row" type="button" onClick={() => setGifts((current) => [...current, ''])}><Plus size={16} />新增一行</button>}><TextRows values={gifts} onChange={setGifts} /></Field>
-    <Field label="封面图片" hint="*横版图，建议图片主体居中" className="package-half"><div className="cover-image-editor"><input ref={coverInputRef} hidden type="file" accept="image/*" onChange={(event) => void upload(event.target.files)} /><button className="image-upload-tile" type="button" title={cover ? '预览封面图片' : '选择封面图片'} aria-label={cover ? '预览封面图片' : '选择封面图片'} onClick={() => cover ? setPreview({ src: cover, isCover: true }) : coverInputRef.current?.click()} disabled={uploading}>{cover ? <img src={cover} alt="封面预览" /> : <ImagePlus size={24} />}</button></div></Field>
-    <Field label="套餐图片" hint="*横版图" className="package-half"><div className="image-editor"><div className="image-grid"><label className="image-upload-tile" title="添加套餐图片"><input type="file" accept="image/*" multiple onChange={(event) => void upload(event.target.files, true)} disabled={uploading} /><ImagePlus size={24} /></label>{images.map((src) => <div className="image-tile" key={src}><button className="image-preview-trigger" type="button" title="预览套餐图片" aria-label="预览套餐图片" onClick={() => setPreview({ src, isCover: false })}><img src={src} alt="套餐图片" /></button><button className="icon-button danger" type="button" aria-label="移除图片" title="移除图片" onClick={() => setImages((current) => current.filter((item) => item !== src))}><X size={15} /></button></div>)}</div></div></Field>
-    <Field label="使用须知" className="package-full" action={<button className="add-row" type="button" onClick={() => setNotices((current) => [...current, ''])}><Plus size={16} />新增一行</button>}><TextRows values={notices} onChange={setNotices} /></Field>
+    <div className="package-column package-media">
+      <Field label="套餐名称" className="package-name"><input name="title" defaultValue={value.title || ''} required /></Field>
+      <Field label="价格" className="package-inline-field package-price"><input name="price" type="number" min="0" step="any" inputMode="decimal" defaultValue={value.price ?? 0} onKeyDown={restrictDecimalInput} onPaste={restrictDecimalPaste} required /></Field>
+      <Field label="赠送积分" className="package-inline-field package-points"><input name="points" type="number" min="0" step="1" inputMode="decimal" defaultValue={value.points ?? 0} onKeyDown={restrictDecimalInput} onPaste={restrictDecimalPaste} required /></Field>
+      <Field label="封面图片" hint="*横版图，建议图片主体居中"><div className="cover-image-editor"><input ref={coverInputRef} hidden type="file" accept="image/*" onChange={(event) => void upload(event.target.files)} /><button className="image-upload-tile" type="button" title={cover ? '预览封面图片' : '选择封面图片'} aria-label={cover ? '预览封面图片' : '选择封面图片'} onClick={() => cover ? setPreview({ images: [cover], activeIndex: 0, isCover: true }) : coverInputRef.current?.click()} disabled={uploading}>{cover ? <img src={cover} alt="封面预览" /> : <ImagePlus size={24} />}</button></div></Field>
+      <Field label="套餐图片" hint="*横版图"><div className="image-editor"><div className="image-grid"><label className="image-upload-tile" title="添加套餐图片"><input type="file" accept="image/*" multiple onChange={(event) => void upload(event.target.files, true)} disabled={uploading} /><ImagePlus size={24} /></label>{images.map((src, index) => <div className="image-tile" key={src}><button className="image-preview-trigger" type="button" title="预览套餐图片" aria-label="预览套餐图片" onClick={() => setPreview({ images, activeIndex: index, isCover: false })}><img src={src} alt="套餐图片" /></button><button className="icon-button danger" type="button" aria-label="移除图片" title="移除图片" onClick={() => setImages((current) => current.filter((item) => item !== src))}><X size={15} /></button></div>)}</div></div></Field>
+    </div>
+    <div className="package-column package-details">
+      <Field label="套餐内容" action={<button className="add-row" type="button" onClick={() => setContents((current) => [...current, { name: '', count: '1' }])}><Plus size={16} />新增一行</button>}><ContentRows values={contents} onChange={setContents} /></Field>
+      <Field label="赠送内容" action={<button className="add-row" type="button" onClick={() => setGifts((current) => [...current, { name: '', count: '1' }])}><Plus size={16} />新增一行</button>}><ContentRows values={gifts} onChange={setGifts} /></Field>
+      <Field label="使用须知" action={<button className="add-row" type="button" onClick={() => setNotices((current) => [...current, ''])}><Plus size={16} />新增一行</button>}><TextRows values={notices} onChange={setNotices} /></Field>
+    </div>
+    <div className="package-column package-sale-controls">
+      <div className="field package-status-field"><div className="package-status-row"><span>上架状态</span><div className="package-active-control"><span>{active ? '已上架' : '已下架'}</span><button className={`status-switch${active ? ' active' : ''}`} type="button" role="switch" aria-checked={active} aria-label={active ? '已上架' : '已下架'} onClick={() => setActive((current) => !current)}><span /></button></div></div></div>
+      <Field label="库存" hint="-1 表示不限量"><input name="stock" type="number" min="-1" step="1" inputMode="numeric" defaultValue={value.stock ?? -1} required /></Field>
+      <Field label="每人限购" hint="0 表示不限购"><input name="purchaseLimit" type="number" min="0" step="1" inputMode="numeric" defaultValue={value.purchaseLimit ?? 0} required /></Field>
+      <Field label="套餐有效期" hint="支付成功后开始计算"><input name="validityDays" type="number" min="1" step="1" inputMode="numeric" defaultValue={value.validityDays ?? 30} required /></Field>
+      <Field label="售卖开始时间"><DateTimeInput name="sellStart" defaultValue={localDateTimeValue(value.sellStart)} /></Field>
+      <Field label="售卖结束时间"><DateTimeInput name="sellEnd" defaultValue={localDateTimeValue(value.sellEnd)} /></Field>
+    </div>
     <FormActions onClose={onClose} />
-  </form></Modal>{preview && <Modal title="图片预览" onClose={() => setPreview(null)} wide><div className="package-image-preview"><img src={preview.src} alt={preview.isCover ? '封面图片大图预览' : '套餐图片大图预览'} />{preview.isCover && <button className="quiet-button preview-change-button" type="button" onClick={() => coverInputRef.current?.click()} disabled={uploading}><ImagePlus size={16} />更换</button>}</div></Modal>}</>
+  </form></Modal>{preview && <PackageImagePreview images={preview.images} initialIndex={preview.activeIndex} isCover={preview.isCover} uploading={uploading} onClose={() => setPreview(null)} onChangeCover={() => coverInputRef.current?.click()} />}</>
+}
+
+function PackageImagePreview({ images, initialIndex, isCover, uploading, onClose, onChangeCover }: { images: string[]; initialIndex: number; isCover: boolean; uploading: boolean; onClose: () => void; onChangeCover: () => void }) {
+  const [activeIndex, setActiveIndex] = useState(initialIndex)
+  const [scale, setScale] = useState(1)
+  const [offset, setOffset] = useState({ x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null)
+  const image = images[activeIndex]
+  const resetTransform = () => {
+    setScale(1)
+    setOffset({ x: 0, y: 0 })
+    setDragging(false)
+    dragRef.current = null
+  }
+
+  useEffect(() => { resetTransform() }, [activeIndex])
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [])
+
+  const selectImage = (index: number) => {
+    if (index === activeIndex) return
+    setActiveIndex(index)
+  }
+
+  const onWheel = (event: WheelEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setScale((current) => {
+      const next = Math.min(4, Math.max(1, current * (event.deltaY < 0 ? 1.16 : .86)))
+      if (next === 1) setOffset({ x: 0, y: 0 })
+      return next
+    })
+  }
+
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (scale <= 1) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: offset.x, originY: offset.y }
+    setDragging(true)
+  }
+
+  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const limitX = event.currentTarget.clientWidth * (scale - 1) / 2
+    const limitY = event.currentTarget.clientHeight * (scale - 1) / 2
+    setOffset({ x: Math.max(-limitX, Math.min(limitX, drag.originX + event.clientX - drag.startX)), y: Math.max(-limitY, Math.min(limitY, drag.originY + event.clientY - drag.startY)) })
+  }
+
+  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId !== event.pointerId) return
+    dragRef.current = null
+    setDragging(false)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  return <div className="preview-mask" role="presentation" onMouseDown={onClose}>
+    <section className="preview-dialog" role="dialog" aria-modal="true" aria-label="图片预览" onMouseDown={(event) => event.stopPropagation()}>
+      <button className="preview-close" type="button" aria-label="关闭图片预览" onClick={onClose}><X size={20} /></button>
+      <div className={`preview-canvas${scale > 1 ? ' is-zoomed' : ''}${dragging ? ' is-dragging' : ''}`} onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+        <img key={image} className="preview-image" src={image} alt={isCover ? '封面图片大图预览' : '套餐图片大图预览'} draggable={false} style={{ transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})` }} />
+      </div>
+      <div className="preview-indicator">
+        <button type="button" aria-label="上一张图片" disabled={activeIndex === 0} onClick={() => selectImage(activeIndex - 1)}><ChevronLeft size={18} /></button>
+        <span>{activeIndex + 1} / {images.length}</span>
+        <button type="button" aria-label="下一张图片" disabled={activeIndex === images.length - 1} onClick={() => selectImage(activeIndex + 1)}><ChevronRight size={18} /></button>
+      </div>
+      <p className="preview-hint">*鼠标置于图片上，可用鼠标滚轮缩放图片</p>
+      {isCover && <button className="quiet-button preview-change-button" type="button" onClick={onChangeCover} disabled={uploading}><ImagePlus size={16} />更换</button>}
+    </section>
+  </div>
 }
 
 function ContentRows({ values, onChange }: { values: PackageContent[]; onChange: (values: PackageContent[]) => void }) {
-  return <div className="row-editor">{values.map((item, index) => <div className="edit-row" key={index}><input value={item.name} onChange={(event) => onChange(values.map((value, i) => i === index ? { ...value, name: event.target.value } : value))} placeholder="项目名称" /><input className="row-count" value={item.count} onChange={(event) => onChange(values.map((value, i) => i === index ? { ...value, count: event.target.value } : value))} placeholder="数量" /><IconButton label="删除此行" danger onClick={() => onChange(values.filter((_, i) => i !== index))}><X size={15} /></IconButton></div>)}</div>
+  return <div className="row-editor">{values.map((item, index) => <div className="edit-row" key={index}><input value={item.name} onChange={(event) => onChange(values.map((value, i) => i === index ? { ...value, name: event.target.value } : value))} placeholder="名称" /><input className="row-count" value={item.count} inputMode="numeric" onKeyDown={restrictIntegerInput} onPaste={restrictIntegerPaste} onChange={(event) => onChange(values.map((value, i) => i === index ? { ...value, count: numericCount(event.target.value) } : value))} placeholder="数量" /><IconButton label="删除此行" danger onClick={() => onChange(values.filter((_, i) => i !== index))}><X size={15} /></IconButton></div>)}</div>
 }
 
 function TextRows({ values, onChange }: { values: string[]; onChange: (values: string[]) => void }) {
@@ -633,6 +832,8 @@ function GamesPage() {
   const [loading, setLoading] = useState(true)
   const [updatingID, setUpdatingID] = useState('')
   const [gameDraft, setGameDraft] = useState<AdminGame | null | undefined>(null)
+  const [activeCategory, setActiveCategory] = useState<GameCategory>('drinking')
+  const visibleGames = useMemo(() => games.filter((game) => (game.category || 'drinking') === activeCategory), [activeCategory, games])
 
   const refresh = async () => {
     setLoading(true)
@@ -665,28 +866,41 @@ function GamesPage() {
 
   if (loading) return <Loading />
   return <>
-    <div className="page-toolbar"><button className="primary-button" onClick={() => setGameDraft(undefined)}><Plus size={18} />新增游戏</button></div>
+    <div className="game-tabs-row">
+      <section className="game-category-tabs" role="tablist" aria-label="游戏分类">
+        {gameCategories.map((category) => <button
+          key={category.id}
+          className={`game-category-tab${activeCategory === category.id ? ' active' : ''}`}
+          role="tab"
+          aria-selected={activeCategory === category.id}
+          onClick={() => setActiveCategory(category.id)}
+        >{category.label}<small>{games.filter((game) => (game.category || 'drinking') === category.id).length}</small></button>)}
+      </section>
+      <div className="page-toolbar"><button className="primary-button" onClick={() => setGameDraft(undefined)}><Plus size={18} />新增游戏</button></div>
+    </div>
     <section className="table-surface">
     <table className="data-table games-table">
-      <thead><tr><th>图片</th><th>标题</th><th>介绍</th><th>链接</th><th>是否开启</th><th>操作</th></tr></thead>
-      <tbody>{games.map((game) => <tr key={game.id}>
+      <thead><tr><th>图片</th><th>标题</th><th>介绍</th><th>链接</th><th>广告奖励积分</th><th>是否开启</th><th>操作</th></tr></thead>
+      <tbody>{visibleGames.map((game) => <tr key={game.id}>
         <td><Thumbnail src={game.image} alt={game.title} /></td>
         <td><strong>{game.title}</strong></td>
         <td><span className="game-description">{game.description || '未填写'}</span></td>
         <td>{game.link ? <a className="game-link" href={game.link} target="_blank" rel="noreferrer">{game.link}</a> : <span className="muted-value">未填写</span>}</td>
+        <td className="number">{game.rewardPoints}</td>
         <td><button className={`status-switch${game.active ? ' active' : ''}`} type="button" role="switch" aria-checked={game.active} aria-label={`${game.title}${game.active ? '已开启' : '已关闭'}`} disabled={updatingID === game.id} onClick={() => void toggleActive(game)}><span /></button></td>
         <td><IconButton label={`编辑${game.title}`} onClick={() => setGameDraft(game)}><Edit3 size={17} /></IconButton></td>
       </tr>)}
-      {games.length === 0 && <tr><td colSpan={6} className="empty-row">暂无游戏</td></tr>}</tbody>
+      {visibleGames.length === 0 && <tr><td colSpan={7} className="empty-row">当前分类暂无游戏</td></tr>}</tbody>
     </table>
   </section>
-  {gameDraft !== null && <GameModal value={gameDraft} onClose={() => setGameDraft(null)} onSaved={saveGame} />}
+  {gameDraft !== null && <GameModal value={gameDraft} initialCategory={activeCategory} onClose={() => setGameDraft(null)} onSaved={saveGame} />}
   </>
 }
 
-function GameModal({ value, onClose, onSaved }: { value: AdminGame | undefined; onClose: () => void; onSaved: (game: AdminGame) => Promise<void> }) {
+function GameModal({ value, initialCategory, onClose, onSaved }: { value: AdminGame | undefined; initialCategory: GameCategory; onClose: () => void; onSaved: (game: AdminGame) => Promise<void> }) {
   const [image, setImage] = useState(value?.image || '')
   const [active, setActive] = useState(value?.active ?? true)
+  const [category, setCategory] = useState<GameCategory>(value?.category || initialCategory)
   const [uploading, setUploading] = useState(false)
 
   const upload = async (files: FileList | null) => {
@@ -706,9 +920,11 @@ function GameModal({ value, onClose, onSaved }: { value: AdminGame | undefined; 
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const title = String(form.get('title') || '').trim()
+    const rewardPoints = Number(form.get('rewardPoints'))
     if (!title) { alertMessage(new Error('游戏标题不能为空')); return }
+    if (!Number.isInteger(rewardPoints) || rewardPoints < 0) { alertMessage(new Error('广告奖励积分必须是大于或等于 0 的整数')); return }
     try {
-      await onSaved({ id: value?.id || '', image, title, description: String(form.get('description') || '').trim(), link: String(form.get('link') || '').trim(), active })
+      await onSaved({ id: value?.id || '', image, title, description: String(form.get('description') || '').trim(), link: String(form.get('link') || '').trim(), rewardPoints, active, category })
       onClose()
     } catch (error) {
       alertMessage(error)
@@ -721,7 +937,9 @@ function GameModal({ value, onClose, onSaved }: { value: AdminGame | undefined; 
       <Field label="标题"><input name="title" defaultValue={value?.title || ''} autoFocus required /></Field>
       <Field label="是否开启" className="game-active-field"><button className={`status-switch${active ? ' active' : ''}`} type="button" role="switch" aria-checked={active} aria-label={active ? '已开启' : '已关闭'} onClick={() => setActive((current) => !current)}><span /></button></Field>
     </div>
-    <Field label="链接"><input name="link" type="url" defaultValue={value?.link || ''} placeholder="https://" /></Field>
+    <Field label="游戏分类"><select value={category} onChange={(event) => setCategory(event.target.value as GameCategory)}>{gameCategories.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></Field>
+    <Field label="链接"><input name="link" type="text" defaultValue={value?.link || ''} placeholder="/h5/#/游戏路由 或 https://..." /></Field>
+    <Field label="看广告奖励积分"><input name="rewardPoints" type="number" min="0" step="1" defaultValue={value?.rewardPoints ?? 0} required /></Field>
     <Field label="介绍"><textarea name="description" defaultValue={value?.description || ''} /></Field>
     <FormActions onClose={onClose} />
   </form></Modal>
@@ -855,7 +1073,7 @@ function SettingsPage() {
   </section>
 }
 
-function UsersPage() { return <ListPage title="用户管理" icon={<UsersRound size={19} />} fetcher={(page, query) => api<ListResult<User>>(`/users?page=${page}&q=${encodeURIComponent(query)}`)} render={({ items }) => <table className="data-table"><thead><tr><th>用户</th><th>手机号码</th><th>积分</th><th>操作</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td><div className="user-cell"><img src={item.avatar} alt="" /><strong>{item.nickname || '未设置'}</strong></div></td><td>{item.phone || '未设置'}</td><td className="number">{item.points}</td><td><div className="table-actions"><button className="quiet-button table-action" type="button" onClick={() => { window.location.href = `/orders?userId=${encodeURIComponent(item.id)}&paymentType=money` }}>下单记录({item.orderCount}笔)</button><button className="quiet-button table-action" type="button" onClick={() => { window.location.href = `/orders?userId=${encodeURIComponent(item.id)}&paymentType=points` }}>积分兑换记录</button></div></td></tr>)}</tbody></table>} /> }
+function UsersPage() { return <ListPage title="用户管理" icon={<UsersRound size={19} />} fetcher={(page, query) => api<ListResult<User>>(`/users?page=${page}&q=${encodeURIComponent(query)}`)} render={({ items }) => <table className="data-table"><thead><tr><th>用户</th><th>手机号码</th><th>积分</th><th>操作</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td><div className="user-cell"><img src={item.avatar} alt="" /><strong>{item.nickname || '未设置'}</strong></div></td><td>{item.phone || '未设置'}</td><td className="number">{item.points}</td><td><div className="table-actions"><button className="quiet-button table-action" type="button" onClick={() => { window.location.href = adminPath(`/orders?userId=${encodeURIComponent(item.id)}&paymentType=money`) }}>下单记录({item.orderCount}笔)</button><button className="quiet-button table-action" type="button" onClick={() => { window.location.href = adminPath(`/orders?userId=${encodeURIComponent(item.id)}&paymentType=points`) }}>积分兑换记录</button></div></td></tr>)}</tbody></table>} /> }
 
 function OrdersPage() {
   const [detail, setDetail] = useState<AdminOrderDetail | null>(null)
@@ -871,7 +1089,7 @@ function OrdersPage() {
 }
 
 function OrderDetailModal({ value, onClose }: { value: AdminOrderDetail; onClose: () => void }) {
-  return <Modal title="订单详情" onClose={onClose}><div className="order-detail"><div className="order-summary">{value.coverImage && <Thumbnail src={value.coverImage} alt="订单图片" />}<div><strong>{value.packageTitle}</strong><span>{value.merchantName}</span></div><b>{value.paymentType === 'points' ? `${value.price.toFixed(0)} 积分` : `¥${value.price.toFixed(2)}`}</b></div><div className="detail-list"><span>订单号<strong>{value.orderNo}</strong></span><span>下单时间<strong>{value.createdAt}</strong></span><span>订单状态<strong>{statusLabel(value.status)}</strong></span><span>下单用户<strong>{value.nickname} {value.phone}</strong></span>{value.paymentType === 'money' && <span>赠送积分<strong>{value.points}</strong></span>}</div><section className="detail-section"><h3>{value.paymentType === 'points' ? '兑换内容' : '套餐内容'}</h3>{value.contents.length ? value.contents.map((item, index) => <div className="detail-line" key={`${item.name}-${index}`}><span>{item.name}</span><strong>{item.count}</strong></div>) : <div className="detail-line muted">暂无内容</div>}</section>{value.gifts.length > 0 && <section className="detail-section"><h3>赠送内容</h3>{value.gifts.map((item, index) => <div className="detail-line" key={`${item}-${index}`}>{item}</div>)}</section>}{value.notices.length > 0 && <section className="detail-section"><h3>使用须知</h3>{value.notices.map((item, index) => <div className="detail-line" key={`${item}-${index}`}>{item}</div>)}</section>}</div></Modal>
+  return <Modal title="订单详情" onClose={onClose}><div className="order-detail"><div className="order-summary">{value.coverImage && <Thumbnail src={value.coverImage} alt="订单图片" />}<div><strong>{value.packageTitle}</strong><span>{value.merchantName}</span></div><b>{value.paymentType === 'points' ? `${value.price.toFixed(0)} 积分` : `¥${value.price.toFixed(2)}`}</b></div><div className="detail-list"><span>订单号<strong>{value.orderNo}</strong></span><span>下单时间<strong>{value.createdAt}</strong></span>{value.paymentType === 'money' && value.expiresAt && <span>有效期至<strong>{value.expiresAt}</strong></span>}<span>订单状态<strong>{statusLabel(value.status)}</strong></span><span>下单用户<strong>{value.nickname} {value.phone}</strong></span>{value.paymentType === 'money' && <span>赠送积分<strong>{value.points}</strong></span>}</div><section className="detail-section order-timeline"><h3>订单时间线</h3>{value.events.length ? <div className="timeline-list">{value.events.map((event, index) => <div className="timeline-item" key={`${event.type}-${event.occurredAt}-${index}`}><span className="timeline-dot" /><div className="timeline-copy"><strong>{event.title}</strong>{event.detail && <span>{event.detail}</span>}</div><time>{event.occurredAt}</time></div>)}</div> : <div className="detail-line muted">暂无事件记录</div>}</section><section className="detail-section"><h3>{value.paymentType === 'points' ? '兑换内容' : '套餐内容'}</h3>{value.contents.length ? value.contents.map((item, index) => <div className="detail-line" key={`${item.name}-${index}`}><span>{item.name}</span><strong>{item.count}</strong></div>) : <div className="detail-line muted">暂无内容</div>}</section>{value.gifts.length > 0 && <section className="detail-section"><h3>赠送内容</h3>{value.gifts.map((item, index) => <div className="detail-line" key={`${item}-${index}`}>{item}</div>)}</section>}{value.notices.length > 0 && <section className="detail-section"><h3>使用须知</h3>{value.notices.map((item, index) => <div className="detail-line" key={`${item}-${index}`}>{item}</div>)}</section>}</div></Modal>
 }
 
 function ListPage<T extends { id: string }>({ title, icon, fetcher, render }: { title: string; icon: ReactNode; fetcher: (page: number, query: string) => Promise<ListResult<T>>; render: (result: ListResult<T>) => ReactNode }) {
@@ -888,9 +1106,15 @@ function ListPage<T extends { id: string }>({ title, icon, fetcher, render }: { 
   </>
 }
 
-function Field({ label, hint, action, children, className = '' }: { label: string; hint?: string; action?: ReactNode; children: ReactNode; className?: string }) { return <div className={`field ${className}`}><div className="field-label"><span>{label}</span>{hint && <small>{hint}</small>}{action && <span className="field-action">{action}</span>}</div>{children}</div> }
+function Field({ label, hint, action, required, children, className = '' }: { label: string; hint?: string; action?: ReactNode; required?: boolean; children: ReactNode; className?: string }) { return <div className={`field ${className}`}><div className="field-label"><span>{required && <b className="field-required">*</b>}{label}</span>{hint && <small>{hint}</small>}{action && <span className="field-action">{action}</span>}</div>{children}</div> }
+function DateTimeInput({ name, defaultValue }: { name: string; defaultValue: string }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [empty, setEmpty] = useState(!defaultValue)
+  const showPicker = () => inputRef.current?.showPicker?.()
+  return <div className={`datetime-input${empty ? ' is-empty' : ''}`} onClick={showPicker}><input ref={inputRef} name={name} type="datetime-local" defaultValue={defaultValue} onChange={(event) => setEmpty(!event.currentTarget.value)} />{empty && <span>点击选择时间</span>}</div>
+}
 function FormActions({ onClose }: { onClose: () => void }) { return <div className="form-actions"><button type="button" className="quiet-button" onClick={onClose}>取消</button><button className="primary-button" type="submit">保存</button></div> }
-function IconButton({ label, children, danger, onClick }: { label: string; children: ReactNode; danger?: boolean; onClick: () => void }) { return <button className={`icon-button${danger ? ' danger' : ''}`} aria-label={label} title={label} onClick={onClick}>{children}</button> }
+function IconButton({ label, children, danger, onClick }: { label: string; children: ReactNode; danger?: boolean; onClick: () => void }) { return <button type="button" className={`icon-button${danger ? ' danger' : ''}`} aria-label={label} title={label} onClick={onClick}>{children}</button> }
 function Thumbnail({ src, alt }: { src: string; alt: string }) { return src ? <img className="thumbnail" src={src} alt={alt} /> : <span className="thumbnail placeholder" /> }
 function Loading() { return <div className="loading"><LoaderCircle size={20} />加载中</div> }
 function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) { return <div className="modal-mask" role="presentation" onMouseDown={onClose}><section className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}><header><h2>{title}</h2><IconButton label="关闭" onClick={onClose}><X size={19} /></IconButton></header><div className="modal-content">{children}</div></section></div> }

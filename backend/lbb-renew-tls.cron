@@ -1,0 +1,1 @@
+17 3 * * * root /opt/lbb_mall/backend/renew-tls.sh >> /var/log/lbb-renew-tls.log 2>&1

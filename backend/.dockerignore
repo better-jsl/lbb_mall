@@ -1,0 +1,6 @@
+.env
+.go-cache
+.gocache
+secrets
+uploads
+lbb-mall-api.exe

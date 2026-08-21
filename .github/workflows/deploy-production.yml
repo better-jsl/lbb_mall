@@ -85,6 +85,9 @@ jobs:
       - name: Build admin
         if: needs.determine-target.outputs.deploy_admin == 'true'
         working-directory: admin
+        env:
+          VITE_AMAP_WEB_JS_KEY: ${{ secrets.AMAP_WEB_JS_KEY }}
+          VITE_AMAP_SECURITY_JS_CODE: ${{ secrets.AMAP_SECURITY_JS_CODE }}
         run: |
           npm ci
           npm run build

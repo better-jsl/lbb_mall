@@ -13,6 +13,7 @@ type Merchant struct {
 	Subtitle   string
 	Pinyin     string
 	Location   string
+	Phone      string
 	DistanceKM float64
 	SortOrder  int
 	Model
@@ -33,19 +34,45 @@ type Package struct {
 	Tone          string
 	Contents      string `gorm:"type:jsonb"`
 	Notices       string `gorm:"type:jsonb"`
+	Active        bool   `gorm:"not null;default:true"`
+	Stock         int    `gorm:"not null;default:-1"`
+	SellStart     *time.Time
+	SellEnd       *time.Time
+	PurchaseLimit int `gorm:"not null;default:0"`
+	ValidityDays  int `gorm:"not null;default:30"`
 	SortOrder     int
 	Model
 }
 
 type Order struct {
-	ID         string  `gorm:"primaryKey"`
-	PackageID  string  `gorm:"not null;index"`
-	Package    Package `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	UserID     string  `gorm:"index"`
-	User       Profile `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	OrderNo    string  `gorm:"not null;uniqueIndex"`
-	Status     string  `gorm:"not null"`
-	VerifiedAt *time.Time
+	ID                  string  `gorm:"primaryKey"`
+	PackageID           string  `gorm:"not null;index"`
+	Package             Package `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	UserID              string  `gorm:"index"`
+	User                Profile `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	OrderNo             string  `gorm:"not null;uniqueIndex"`
+	Status              string  `gorm:"not null"`
+	PaymentStatus       string  `gorm:"not null;default:paid;index"`
+	WechatTransactionID string  `gorm:"index"`
+	PaidAt              *time.Time
+	ExpiresAt           *time.Time
+	VerifiedAt          *time.Time
+	RefundStatus        string `gorm:"not null;default:none"`
+	RefundNo            string `gorm:"index"`
+	WechatRefundID      string `gorm:"index"`
+	RefundFailureReason string
+	RefundedAt          *time.Time
+	Model
+}
+
+type OrderEvent struct {
+	ID          string `gorm:"primaryKey"`
+	OrderID     string `gorm:"not null;index"`
+	PaymentType string `gorm:"not null;index"`
+	EventType   string `gorm:"not null"`
+	Title       string `gorm:"not null"`
+	Detail      string
+	OccurredAt  time.Time `gorm:"not null;index"`
 	Model
 }
 
@@ -204,19 +231,33 @@ type DailyTaskCompletion struct {
 }
 
 type Game struct {
-	ID          string `gorm:"primaryKey"`
-	Emoji       string
-	Image       string
-	Title       string `gorm:"not null"`
-	Rule        string
-	Description string
-	Link        string
-	Points      int `gorm:"not null"`
-	DailyLimit  int `gorm:"not null"`
-	TeamSize    int `gorm:"not null;default:1"`
-	Tone        string
-	SortOrder   int
-	Active      bool `gorm:"not null;default:true"`
+	ID           string `gorm:"primaryKey"`
+	Emoji        string
+	Image        string
+	Title        string `gorm:"not null"`
+	Rule         string
+	Description  string
+	Link         string
+	RewardPoints int `gorm:"not null;default:0"`
+	Points       int `gorm:"not null"`
+	DailyLimit   int `gorm:"not null"`
+	TeamSize     int `gorm:"not null;default:1"`
+	Tone         string
+	SortOrder    int
+	Active       bool `gorm:"not null;default:true"`
+	Model
+}
+
+// GameReward records one completed rewarded-ad request. RequestID is unique
+// per user so repeated API calls cannot grant points twice.
+type GameReward struct {
+	ID        string  `gorm:"primaryKey"`
+	UserID    string  `gorm:"not null;uniqueIndex:idx_game_rewards_user_request"`
+	User      Profile `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	GameID    string  `gorm:"not null;index"`
+	Game      Game    `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	RequestID string  `gorm:"not null;uniqueIndex:idx_game_rewards_user_request"`
+	Points    int     `gorm:"not null"`
 	Model
 }
 

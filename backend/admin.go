@@ -19,17 +19,23 @@ type packageContent struct {
 }
 
 type adminPackage struct {
-	ID         string           `json:"id"`
-	MerchantID string           `json:"merchantId"`
-	Title      string           `json:"title"`
-	CoverImage string           `json:"coverImage"`
-	Price      float64          `json:"price"`
-	Points     int              `json:"points"`
-	Contents   []packageContent `json:"contents"`
-	Gifts      []string         `json:"gifts"`
-	Images     []string         `json:"images"`
-	Notices    []string         `json:"notices"`
-	SortOrder  int              `json:"sortOrder"`
+	ID            string           `json:"id"`
+	MerchantID    string           `json:"merchantId"`
+	Title         string           `json:"title"`
+	CoverImage    string           `json:"coverImage"`
+	Price         float64          `json:"price"`
+	Points        int              `json:"points"`
+	Contents      []packageContent `json:"contents"`
+	Gifts         []string         `json:"gifts"`
+	Images        []string         `json:"images"`
+	Notices       []string         `json:"notices"`
+	Active        bool             `json:"active"`
+	Stock         int              `json:"stock"`
+	SellStart     *time.Time       `json:"sellStart"`
+	SellEnd       *time.Time       `json:"sellEnd"`
+	PurchaseLimit int              `json:"purchaseLimit"`
+	ValidityDays  int              `json:"validityDays"`
+	SortOrder     int              `json:"sortOrder"`
 }
 
 type adminMerchant struct {
@@ -38,6 +44,7 @@ type adminMerchant struct {
 	Subtitle  string         `json:"subtitle"`
 	Pinyin    string         `json:"pinyin"`
 	Location  string         `json:"location"`
+	Phone     string         `json:"phone"`
 	SortOrder int            `json:"sortOrder"`
 	Packages  []adminPackage `json:"packages"`
 }
@@ -46,18 +53,25 @@ type adminMerchantInput struct {
 	Name     string `json:"name"`
 	Subtitle string `json:"subtitle"`
 	Location string `json:"location"`
+	Phone    string `json:"phone"`
 }
 
 type adminPackageInput struct {
-	MerchantID string           `json:"merchantId"`
-	Title      string           `json:"title"`
-	CoverImage string           `json:"coverImage"`
-	Price      float64          `json:"price"`
-	Points     int              `json:"points"`
-	Contents   []packageContent `json:"contents"`
-	Gifts      []string         `json:"gifts"`
-	Images     []string         `json:"images"`
-	Notices    []string         `json:"notices"`
+	MerchantID    string           `json:"merchantId"`
+	Title         string           `json:"title"`
+	CoverImage    string           `json:"coverImage"`
+	Price         float64          `json:"price"`
+	Points        int              `json:"points"`
+	Contents      []packageContent `json:"contents"`
+	Gifts         []string         `json:"gifts"`
+	Images        []string         `json:"images"`
+	Notices       []string         `json:"notices"`
+	Active        bool             `json:"active"`
+	Stock         int              `json:"stock"`
+	SellStart     *time.Time       `json:"sellStart"`
+	SellEnd       *time.Time       `json:"sellEnd"`
+	PurchaseLimit int              `json:"purchaseLimit"`
+	ValidityDays  int              `json:"validityDays"`
 }
 
 type reorderInput struct {
@@ -99,11 +113,11 @@ func (a *app) uploadAdminImage(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	respond(w, http.StatusCreated, map[string]string{"url": "http://127.0.0.1:8080/uploads/" + filename})
+	respond(w, http.StatusCreated, map[string]string{"url": publicImageURL(r, "http://127.0.0.1:8080/uploads/"+filename)})
 }
 
 func (a *app) adminMerchants(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.db.QueryContext(r.Context(), `SELECT id, name, COALESCE(subtitle, ''), pinyin, COALESCE(location, ''), sort_order FROM merchants ORDER BY sort_order, created_at`)
+	rows, err := a.db.QueryContext(r.Context(), `SELECT id, name, COALESCE(subtitle, ''), pinyin, COALESCE(location, ''), COALESCE(phone, ''), sort_order FROM merchants ORDER BY sort_order, created_at`)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -113,7 +127,7 @@ func (a *app) adminMerchants(w http.ResponseWriter, r *http.Request) {
 	items := []adminMerchant{}
 	for rows.Next() {
 		var item adminMerchant
-		if err := rows.Scan(&item.ID, &item.Name, &item.Subtitle, &item.Pinyin, &item.Location, &item.SortOrder); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Subtitle, &item.Pinyin, &item.Location, &item.Phone, &item.SortOrder); err != nil {
 			serverError(w, err)
 			return
 		}
@@ -131,7 +145,8 @@ func (a *app) adminMerchants(w http.ResponseWriter, r *http.Request) {
 func (a *app) adminPackages(r *http.Request, merchantID string) ([]adminPackage, error) {
 	rows, err := a.db.QueryContext(r.Context(), `SELECT id, merchant_id, title, COALESCE(cover_image, ''), price, points,
 		COALESCE(contents, '[]'::jsonb)::text, COALESCE(gifts, '[]'::jsonb)::text,
-		COALESCE(package_images, '[]'::jsonb)::text, COALESCE(notices, '[]'::jsonb)::text, sort_order
+		COALESCE(package_images, '[]'::jsonb)::text, COALESCE(notices, '[]'::jsonb)::text,
+		active, stock, sell_start, sell_end, purchase_limit, validity_days, sort_order
 		FROM packages WHERE merchant_id = $1 ORDER BY sort_order, created_at`, merchantID)
 	if err != nil {
 		return nil, err
@@ -142,13 +157,24 @@ func (a *app) adminPackages(r *http.Request, merchantID string) ([]adminPackage,
 	for rows.Next() {
 		var item adminPackage
 		var contents, gifts, images, notices string
-		if err := rows.Scan(&item.ID, &item.MerchantID, &item.Title, &item.CoverImage, &item.Price, &item.Points, &contents, &gifts, &images, &notices, &item.SortOrder); err != nil {
+		var sellStart, sellEnd sql.NullTime
+		if err := rows.Scan(&item.ID, &item.MerchantID, &item.Title, &item.CoverImage, &item.Price, &item.Points, &contents, &gifts, &images, &notices, &item.Active, &item.Stock, &sellStart, &sellEnd, &item.PurchaseLimit, &item.ValidityDays, &item.SortOrder); err != nil {
 			return nil, err
+		}
+		if sellStart.Valid {
+			item.SellStart = &sellStart.Time
+		}
+		if sellEnd.Valid {
+			item.SellEnd = &sellEnd.Time
 		}
 		_ = json.Unmarshal([]byte(contents), &item.Contents)
 		_ = json.Unmarshal([]byte(gifts), &item.Gifts)
 		_ = json.Unmarshal([]byte(images), &item.Images)
 		_ = json.Unmarshal([]byte(notices), &item.Notices)
+		item.CoverImage = publicImageURL(r, item.CoverImage)
+		for index, image := range item.Images {
+			item.Images[index] = publicImageURL(r, image)
+		}
 		items = append(items, item)
 	}
 	return items, rows.Err()
@@ -170,7 +196,7 @@ func (a *app) createAdminMerchant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := newID("merchant")
-	if _, err := a.db.ExecContext(r.Context(), `INSERT INTO merchants(id, name, subtitle, pinyin, location, sort_order) VALUES($1, $2, $3, $4, $5, $6)`, id, input.Name, strings.TrimSpace(input.Subtitle), strings.ToLower(input.Name), strings.TrimSpace(input.Location), sortOrder); err != nil {
+	if _, err := a.db.ExecContext(r.Context(), `INSERT INTO merchants(id, name, subtitle, pinyin, location, phone, sort_order) VALUES($1, $2, $3, $4, $5, $6, $7)`, id, input.Name, strings.TrimSpace(input.Subtitle), strings.ToLower(input.Name), strings.TrimSpace(input.Location), strings.TrimSpace(input.Phone), sortOrder); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -187,7 +213,7 @@ func (a *app) updateAdminMerchant(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "商家名称不能为空")
 		return
 	}
-	result, err := a.db.ExecContext(r.Context(), `UPDATE merchants SET name = $1, subtitle = $2, pinyin = $3, location = $4, updated_at = NOW() WHERE id = $5`, input.Name, strings.TrimSpace(input.Subtitle), strings.ToLower(input.Name), strings.TrimSpace(input.Location), r.PathValue("id"))
+	result, err := a.db.ExecContext(r.Context(), `UPDATE merchants SET name = $1, subtitle = $2, pinyin = $3, location = $4, phone = $5, updated_at = NOW() WHERE id = $6`, input.Name, strings.TrimSpace(input.Subtitle), strings.ToLower(input.Name), strings.TrimSpace(input.Location), strings.TrimSpace(input.Phone), r.PathValue("id"))
 	if err != nil {
 		serverError(w, err)
 		return
@@ -305,11 +331,11 @@ func (a *app) savePackage(r *http.Request, id string, input adminPackageInput, s
 	images, _ := json.Marshal(input.Images)
 	notices, _ := json.Marshal(input.Notices)
 	if creating {
-		_, err := a.db.ExecContext(r.Context(), `INSERT INTO packages(id, merchant_id, title, cover_image, price, points, tag, gifts, package_images, tone, contents, notices, sort_order)
-			VALUES($1,$2,$3,$4,$5,$6,'赠送',$7,$8,'default',$9,$10,$11)`, id, input.MerchantID, input.Title, input.CoverImage, input.Price, input.Points, gifts, images, contents, notices, sortOrder)
+		_, err := a.db.ExecContext(r.Context(), `INSERT INTO packages(id, merchant_id, title, cover_image, price, points, tag, gifts, package_images, tone, contents, notices, active, stock, sell_start, sell_end, purchase_limit, validity_days, sort_order)
+			VALUES($1,$2,$3,$4,$5,$6,'赠送',$7,$8,'default',$9,$10,$11,$12,$13,$14,$15,$16,$17)`, id, input.MerchantID, input.Title, input.CoverImage, input.Price, input.Points, gifts, images, contents, notices, input.Active, input.Stock, input.SellStart, input.SellEnd, input.PurchaseLimit, input.ValidityDays, sortOrder)
 		return err
 	}
-	_, err := a.db.ExecContext(r.Context(), `UPDATE packages SET merchant_id=$1, title=$2, cover_image=$3, price=$4, points=$5, gifts=$6, package_images=$7, contents=$8, notices=$9, updated_at=NOW() WHERE id=$10`, input.MerchantID, input.Title, input.CoverImage, input.Price, input.Points, gifts, images, contents, notices, id)
+	_, err := a.db.ExecContext(r.Context(), `UPDATE packages SET merchant_id=$1, title=$2, cover_image=$3, price=$4, points=$5, gifts=$6, package_images=$7, contents=$8, notices=$9, active=$10, stock=$11, sell_start=$12, sell_end=$13, purchase_limit=$14, validity_days=$15, updated_at=NOW() WHERE id=$16`, input.MerchantID, input.Title, input.CoverImage, input.Price, input.Points, gifts, images, contents, notices, input.Active, input.Stock, input.SellStart, input.SellEnd, input.PurchaseLimit, input.ValidityDays, id)
 	return err
 }
 
@@ -353,12 +379,16 @@ func (a *app) adminUsers(w http.ResponseWriter, r *http.Request) {
 			serverError(w, err)
 			return
 		}
-		items = append(items, map[string]any{"id": id, "nickname": nickname, "avatar": avatar, "phone": phone, "points": points, "orderCount": orderCount})
+		items = append(items, map[string]any{"id": id, "nickname": nickname, "avatar": publicImageURL(r, avatar), "phone": phone, "points": points, "orderCount": orderCount})
 	}
 	respond(w, http.StatusOK, map[string]any{"items": items, "total": total, "page": page, "size": size})
 }
 
 func (a *app) adminOrders(w http.ResponseWriter, r *http.Request) {
+	if err := a.expireOrders(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
 	page, size, query := listOptions(r)
 	userID := strings.TrimSpace(r.URL.Query().Get("userId"))
 	paymentType := strings.TrimSpace(r.URL.Query().Get("paymentType"))
@@ -367,7 +397,7 @@ func (a *app) adminOrders(w http.ResponseWriter, r *http.Request) {
 	}
 	var total int
 	if err := a.db.QueryRowContext(r.Context(), `WITH records AS (
-		SELECT o.user_id, u.nickname, p.title AS content, 'money' AS payment_type FROM orders o JOIN profile u ON u.id=o.user_id JOIN packages p ON p.id=o.package_id
+		SELECT o.user_id, u.nickname, p.title AS content, 'money' AS payment_type FROM orders o JOIN profile u ON u.id=o.user_id JOIN packages p ON p.id=o.package_id WHERE o.payment_status='paid'
 		UNION ALL
 		SELECT pr.user_id, u.nickname, pp.title AS content, 'points' AS payment_type FROM points_redemptions pr JOIN profile u ON u.id=pr.user_id JOIN points_products pp ON pp.id=pr.product_id
 	) SELECT COUNT(*) FROM records WHERE (nickname ILIKE $1 OR content ILIKE $1) AND ($2 = '' OR payment_type = $2) AND ($3 = '' OR user_id = $3)`, "%"+query+"%", paymentType, userID).Scan(&total); err != nil {
@@ -376,7 +406,7 @@ func (a *app) adminOrders(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := a.db.QueryContext(r.Context(), `WITH records AS (
 		SELECT o.id, o.order_no, o.created_at, o.status, u.nickname, u.phone, p.title AS content, p.price::numeric AS price, 'money' AS payment_type, o.user_id
-		FROM orders o JOIN profile u ON u.id=o.user_id JOIN packages p ON p.id=o.package_id
+		FROM orders o JOIN profile u ON u.id=o.user_id JOIN packages p ON p.id=o.package_id WHERE o.payment_status='paid'
 		UNION ALL
 		SELECT pr.id, pr.id AS order_no, pr.created_at, pr.status, u.nickname, u.phone, pp.title AS content, pr.points_cost::numeric AS price, 'points' AS payment_type, pr.user_id
 		FROM points_redemptions pr JOIN profile u ON u.id=pr.user_id JOIN points_products pp ON pp.id=pr.product_id
@@ -401,15 +431,20 @@ func (a *app) adminOrders(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) adminOrderDetail(w http.ResponseWriter, r *http.Request) {
+	if err := a.expireOrders(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
 	var id, orderNo, createdAt, status, nickname, phone, merchantName, packageTitle, coverImage string
+	var expiresAt sql.NullString
 	var price float64
 	var points int
 	var contents, gifts, images, notices string
 	err := a.db.QueryRowContext(r.Context(), `SELECT o.id, o.order_no, o.created_at::text, o.status, u.nickname, u.phone,
 		m.name, p.title, p.price, p.points, COALESCE(p.cover_image, ''), COALESCE(p.contents, '[]'::jsonb)::text,
-		COALESCE(p.gifts, '[]'::jsonb)::text, COALESCE(p.package_images, '[]'::jsonb)::text, COALESCE(p.notices, '[]'::jsonb)::text
+		COALESCE(p.gifts, '[]'::jsonb)::text, COALESCE(p.package_images, '[]'::jsonb)::text, COALESCE(p.notices, '[]'::jsonb)::text, o.expires_at::text
 		FROM orders o JOIN profile u ON u.id=o.user_id JOIN packages p ON p.id=o.package_id JOIN merchants m ON m.id=p.merchant_id WHERE o.id=$1`, r.PathValue("id")).Scan(
-		&id, &orderNo, &createdAt, &status, &nickname, &phone, &merchantName, &packageTitle, &price, &points, &coverImage, &contents, &gifts, &images, &notices)
+		&id, &orderNo, &createdAt, &status, &nickname, &phone, &merchantName, &packageTitle, &price, &points, &coverImage, &contents, &gifts, &images, &notices, &expiresAt)
 	if err == sql.ErrNoRows {
 		a.adminPointsRedemptionDetail(w, r)
 		return
@@ -424,11 +459,24 @@ func (a *app) adminOrderDetail(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal([]byte(gifts), &giftItems)
 	_ = json.Unmarshal([]byte(images), &imageItems)
 	_ = json.Unmarshal([]byte(notices), &noticeItems)
+	coverImage = publicImageURL(r, coverImage)
+	for index, image := range imageItems {
+		imageItems[index] = publicImageURL(r, image)
+	}
+	expiresAtText := ""
+	if expiresAt.Valid {
+		expiresAtText = shortTimestamp(expiresAt.String)
+	}
+	events, err := a.orderEvents(r.Context(), id, "money")
+	if err != nil {
+		serverError(w, err)
+		return
+	}
 	respond(w, http.StatusOK, map[string]any{
-		"id": id, "orderNo": orderNo, "createdAt": createdAt[:16], "status": status,
+		"id": id, "orderNo": orderNo, "createdAt": shortTimestamp(createdAt), "status": status,
 		"nickname": nickname, "phone": phone, "merchantName": merchantName, "packageTitle": packageTitle,
-		"price": price, "points": points, "coverImage": coverImage, "contents": contentItems,
-		"gifts": giftItems, "images": imageItems, "notices": noticeItems, "paymentType": "money",
+		"price": price, "points": points, "coverImage": coverImage, "contents": contentItems, "expiresAt": expiresAtText,
+		"gifts": giftItems, "images": imageItems, "notices": noticeItems, "events": events, "paymentType": "money",
 	})
 }
 
@@ -459,11 +507,16 @@ func (a *app) adminPointsRedemptionDetail(w http.ResponseWriter, r *http.Request
 		contents = append(contents, packageContent{Name: "收货地址", Count: strings.Join(address.Region, " ") + " " + address.Detail})
 		contents = append(contents, packageContent{Name: "收货人", Count: strings.TrimSpace(address.ContactName + " " + address.ContactPhone)})
 	}
+	events, err := a.orderEvents(r.Context(), id, "points")
+	if err != nil {
+		serverError(w, err)
+		return
+	}
 	respond(w, http.StatusOK, map[string]any{
 		"id": id, "orderNo": id, "createdAt": createdAt[:16], "status": status,
 		"nickname": nickname, "phone": phone, "merchantName": "积分商城", "packageTitle": title,
 		"price": points, "points": 0, "coverImage": publicImageURL(r, image), "contents": contents,
-		"gifts": []string{}, "images": []string{}, "notices": []string{}, "paymentType": "points",
+		"gifts": []string{}, "images": []string{}, "notices": []string{}, "events": events, "paymentType": "points",
 	})
 }
 
@@ -494,6 +547,22 @@ func validPackageInput(w http.ResponseWriter, input adminPackageInput) bool {
 	}
 	if input.Price < 0 || input.Points < 0 {
 		badRequest(w, "价格和积分不能为负数")
+		return false
+	}
+	if input.Stock < -1 {
+		badRequest(w, "库存只能为 -1（不限）或非负整数")
+		return false
+	}
+	if input.PurchaseLimit < 0 {
+		badRequest(w, "每人限购不能为负数")
+		return false
+	}
+	if input.ValidityDays < 1 {
+		badRequest(w, "有效期至少为 1 天")
+		return false
+	}
+	if input.SellStart != nil && input.SellEnd != nil && input.SellStart.After(*input.SellEnd) {
+		badRequest(w, "售卖开始时间不能晚于结束时间")
 		return false
 	}
 	return true
